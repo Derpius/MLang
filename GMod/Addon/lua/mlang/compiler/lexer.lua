@@ -75,7 +75,7 @@ local NUMBER = MakeStringLUT("0123456789.")
 local OPERATOR_CHARS = MakeStringLUT("|&!<>!=^~+-*/%")
 
 -- All operators with a valid assignment operator counterpart
-local ASSIGNMENT_OPS = MakeLUT({"|", "&", "<<", ">>", "+", "-", "*", "/", "//", "%", "**"})
+local ASSIGNMENT_OPS = MakeLUT({"|", "&", "<<", ">>", "+", "-", "*", "/", "//", "%"})
 
 ---@param ctx Context
 ---@param code string

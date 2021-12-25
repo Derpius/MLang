@@ -38,6 +38,6 @@ local Context = context.new
 ---@param char integer
 function context:Throw(msg, line, char)
 	self.error = ErrorDesc(msg, line, char)
-	error("MLang Code Error")
+	error(msg)
 end
 
