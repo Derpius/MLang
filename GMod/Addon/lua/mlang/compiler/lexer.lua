@@ -2,7 +2,7 @@
 ---@field category string
 ---@field value? string|number|boolean
 ---@field line integer
----@field char integer
+---@field col integer
 local token = {}
 token.__index = token
 
@@ -10,14 +10,14 @@ token.__index = token
 ---@param category string
 ---@param value? string|number|boolean
 ---@param line integer
----@param char integer
+---@param col integer
 ---@return Token
-function token.new(category, value, line, char)
-	return {category = category, value = value, line = line, char = char}
+function token.new(category, value, line, col)
+	return {category = category, value = value, line = line, col = col}
 end
 
 function token:__tostring()
-	return string.format("Token<%s> [%i, %i] = %s", self.category, self.line, self.char, tostring(self.value))
+	return string.format("Token<%s> [%i, %i] = %s", self.category, self.line, self.col, tostring(self.value))
 end
 
 MLang.Token = token.new
@@ -51,8 +51,7 @@ local KEYWORDS = MakeLUT({
 	"operator",
 	"namespace",
 	"try",
-	"catch",
-	"ref"
+	"catch"
 })
 
 local ESCAPE_CHARS = {
@@ -138,7 +137,7 @@ local function lex(ctx, code)
 			elseif CONTROL[char] then -- Control characters
 				appendTok(char)
 			elseif STRING[char] then -- Strings
-				local str, delims = "", MakeStringLUT(char .. "\n")
+				local str, delim = "", char
 
 				while true do
 					if charPtr > codeLen then
@@ -146,7 +145,7 @@ local function lex(ctx, code)
 					end
 					char = nextChar()
 
-					if delims[char] then
+					if char == delim then
 						break
 					elseif char == "\\" then
 						char = nextChar()
@@ -156,6 +155,8 @@ local function lex(ctx, code)
 						elseif char ~= "\n" then -- multiline strings via C macro style newline escapes
 							ctx:Throw("Invalid escape sequence", line, col)
 						end
+					elseif char == "\n" then
+						ctx:Throw("A string ran off the end of a line (escape newline with \\ if this was intentional)", line, col)
 					elseif char ~= "\r" then -- Completely ignore CR to avoid escaping issues with Windows line endings
 						str = str .. char
 					end
