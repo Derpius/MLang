@@ -21,3 +21,15 @@ function MLang.Utils.MakeStringLUT(str)
 	end
 	return ret
 end
+
+--- Pairs 2 sequential tables together as kv pairs
+---@param keys any[]
+---@param values any[]
+---@return table
+function MLang.Utils.PairKV(keys, values)
+	local ret = {}
+	for i, key in ipairs(keys) do
+		ret[key] = values[i]
+	end
+	return ret
+end

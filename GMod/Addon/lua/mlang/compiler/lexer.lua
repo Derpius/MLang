@@ -32,26 +32,52 @@ end
 
 local MakeLUT, MakeStringLUT = MLang.Utils.MakeLUT, MLang.Utils.MakeStringLUT
 
-local KEYWORDS = MakeLUT({
-	"const",
-	"if",
-	"else",
-	"while",
-	"do",
-	"for",
-	"foreach",
-	"return",
-	"break",
-	"continue",
-	"class",
-	"private",
-	"public",
-	"operator",
-	"namespace",
-	"try",
-	"catch",
-	"template"
-})
+--- Enum of all MLang keywords
+---@type table<string, integer>
+local Keyword = {
+	Const = 0,
+	If = 1,
+	Else = 2,
+	While = 3,
+	Do = 4,
+	For = 5,
+	Foreach = 6,
+	Return = 7,
+	Break = 8,
+	Continue = 9,
+	Class = 10,
+	Private = 11,
+	Public = 12,
+	Operator = 13,
+	Namespace = 14,
+	Try = 15,
+	Catch = 16,
+	Template = 17
+}
+MLang.Keyword = Keyword
+
+local KEYWORDS = {
+	["const"] = Keyword.Const,
+	["if"] = Keyword.If,
+	["else"] = Keyword.Else,
+	["while"] = Keyword.While,
+	["do"] = Keyword.Do,
+	["for"] = Keyword.For,
+	["foreach"] = Keyword.Foreach,
+	["return"] = Keyword.Return,
+	["break"] = Keyword.Break,
+	["continue"] = Keyword.Continue,
+	["class"] = Keyword.Class,
+	["private"] = Keyword.Private,
+	["public"] = Keyword.Public,
+	["operator"] = Keyword.Operator,
+	["namespace"] = Keyword.Namespace,
+	["try"] = Keyword.Try,
+	["catch"] = Keyword.Catch,
+	["template"] = Keyword.Template
+}
+
+
 
 local ESCAPE_CHARS = {
 	b = "\\b", -- The string literal escape sequences are stored unescaped as they'll be emitted to raw lua
@@ -197,7 +223,7 @@ local function lex(ctx, code)
 				end
 
 				if KEYWORDS[symbol] then
-					appendTok("keyword", symbol)
+					appendTok("keyword", KEYWORDS[symbol])
 				elseif symbol == "true" or symbol == "false" then
 					appendTok("literal", symbol == "true")
 				elseif symbol == "null" then

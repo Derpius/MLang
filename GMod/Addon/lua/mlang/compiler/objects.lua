@@ -157,3 +157,36 @@ local index = {}
 function MLang.Objects.Index(line, col, container, key)
 	return {line = line, col = col, container = container, key = key, _constructor = MLang.Objects.Index}
 end
+
+---@class If : BaseObject
+---@field condition BaseObject
+---@field block BaseObject[]
+---@field otherwise? BaseObject[]|If
+local _if = {}
+
+--- If and else if statements
+---@param line integer
+---@param col integer
+---@param condition BaseObject
+---@param block BaseObject[]
+---@return If
+function MLang.Objects.If(line, col, condition, block)
+	return {line = line, col = col, condition = condition, block = block, _constructor = MLang.Objects.If}
+end
+
+---@class While : BaseObject
+---@field condition BaseObject
+---@field block BaseObject[]
+---@field postcondition boolean
+local _while = {}
+
+--- While loops
+---@param line integer
+---@param col integer
+---@param condition BaseObject
+---@param block BaseObject[]
+---@param postcondition boolean
+---@return While
+function MLang.Objects.While(line, col, condition, block, postcondition)
+	return {line = line, col = col, condition = condition, block = block, postcondition = postcondition, _constructor = MLang.Objects.While}
+end

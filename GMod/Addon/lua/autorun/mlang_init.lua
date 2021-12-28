@@ -17,7 +17,12 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	someFunc<int, string>(someVar)[i + 1] - -3 * 8 + ("hello" + " world").length();
+	int x = 80;
+	x = 4;
+
+	void func() {
+		print("hey");
+	}
 ]]
 
 print("\nLEXING")

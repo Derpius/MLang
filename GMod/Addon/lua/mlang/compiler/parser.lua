@@ -1,5 +1,4 @@
-local MakeLUT = MLang.Utils.MakeLUT
-local Objects = MLang.Objects
+local Objects, Keyword = MLang.Objects, MLang.Keyword
 
 ---@param ctx Context
 ---@param tokens table<integer, Token>
@@ -110,11 +109,12 @@ local function parse(ctx, tokens)
 
 	--- Parses variable declaration/definition
 	---@return Variable
+	---@return boolean isFunction
 	local function parseVariable()
 		local constant = false
 		local cmdPresent, cmd = acceptTok("keyword")
 		if cmdPresent then
-			if cmd.value ~= "const" then
+			if cmd.value ~= Keyword.Const then
 				ctx:Throw("Expected const or type name", cmd.line, cmd.col)
 			end
 			constant = true
@@ -122,6 +122,7 @@ local function parse(ctx, tokens)
 
 		local typeName = requireTok("symbol", "Type name expected")
 		local type, name = MLang.Objects.Type(typeName.line, typeName.col, typeName.value, parseTemplateArguments()), requireTok("symbol", "Variable name expected")
+		local isFunction = false
 
 		local var = Objects.Variable(
 			name.line, name.col,
@@ -130,6 +131,7 @@ local function parse(ctx, tokens)
 
 		if peekTok("(") then
 			var.type = Objects.Function(name.line, name.col, type, parseParams())
+			isFunction = true
 		end
 
 		local isAssignment, tok = acceptTok("assignment")
@@ -142,18 +144,18 @@ local function parse(ctx, tokens)
 			end
 		end
 
-		return var
+		return var, isFunction and not isAssignment
 	end
 
 	function parseParams()
 		requireTok("(")
 		local params, numParams = {}, 0
+		if acceptTok(")") then return {} end
 
-		while true do
+		repeat
 			numParams = numParams + 1
 			params[numParams] = parseVariable()
-			if not acceptTok(",") then break end
-		end
+		until not acceptTok(",")
 
 		requireTok(")")
 		return params
@@ -164,12 +166,15 @@ local function parse(ctx, tokens)
 	---@return BaseObject[]
 	local function parseArgs()
 		requireTok("(")
-
 		local args, numArgs = {}, 0
-		while not acceptTok(")") do
+		if acceptTok(")") then return {} end
+	
+		repeat
 			numArgs = numArgs + 1
 			args[numArgs] = parseExpression()
-		end
+		until not acceptTok(",")
+
+		requireTok(")")
 		return args
 	end
 
@@ -228,14 +233,9 @@ local function parse(ctx, tokens)
 	end
 
 	--- Parses assigning to a declared symbol
-	---@param symbol Token
+	---@param getter Get|Index Base object to assign to
 	---@return Set
-	local function parseSet(symbol)
-		local getter = parseLookup()
-		if MLang.IsObjectOfType(getter, Objects.Call) then
-			ctx:Throw("Cannot assign to function return")
-		end
-
+	local function parseSet(getter)
 		local assignmentTok = requireTok("assignment", "Expected variable assignment")
 		if assignmentTok.value then
 			local setter = Objects.Set(
@@ -359,9 +359,87 @@ local function parse(ctx, tokens)
 	--- Parses a line of code
 	---@return BaseObject
 	local function parseLine()
-		local ret = parseExpression()
-		requireTok(";")
-		return ret
+		if (
+			(peekTok("symbol") and tokens[tokPtr + 1].category == "symbol") or
+			(peekTok("keyword") and peekTok("keyword").value == Keyword.Const)
+		) then
+			local ret, isFunction = parseVariable()
+
+			if isFunction and peekTok("{") then
+				ret.value = parseBlock()
+				return ret
+			end
+
+			requireTok(";")
+			return ret
+		elseif peekTok("symbol") then
+			local ret = parseLookup()
+			if not MLang.IsObjectOfType(ret, Objects.Call) then
+				ret = parseSet(ret)
+			end
+
+			requireTok(";")
+			return ret
+		elseif peekTok("keyword") then
+			local keyword = getTok()
+
+			if keyword.value == Keyword.If then
+				local ret = Objects.If(keyword.line, keyword.col, parseCondition(), parseBlock())
+
+				while peekTok("keyword") and peekTok("keyword").value == Keyword.Else do
+					local elseTok = getTok()
+					if not peekTok("keyword") or peekTok("keyword").value ~= Keyword.If then
+						ret.otherwise = parseBlock()
+						return ret
+					end
+
+					ret.otherwise = Objects.If(elseTok.line, elseTok.col, parseCondition(), parseBlock())
+				end
+
+				return ret
+			elseif keyword.value == Keyword.While then
+				loopDepth = loopDepth + 1
+				local ret = Objects.While(keyword.line, keyword.col, parseCondition(), parseBlock(), false)
+				loopDepth = loopDepth - 1
+
+				return ret
+			elseif keyword.value == Keyword.Do then
+				loopDepth = loopDepth + 1
+				local block = parseBlock()
+				loopDepth = loopDepth - 1
+
+				local whileKeyword = requireTok("keyword", "Expected while after do block")
+				if whileKeyword.value ~= Keyword.While then
+					ctx:Throw("Expected while after do block", whileKeyword.line, whileKeyword.col)
+				end
+
+				local ret = Objects.While(keyword.line, keyword.col, parseCondition(), block, true)
+				requireTok(";")
+				return ret
+			elseif keyword.value == Keyword.For then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Foreach then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Return then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Break then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Continue then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Class then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Namespace then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Try then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Return then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Template then
+				ctx:Throw("Not implemented yet", -1, -1)
+			else
+				ctx:Throw("Invalid keyword to start line", keyword.line, keyword.col)
+			end
+		end
 	end
 
 	function parseBlock()
