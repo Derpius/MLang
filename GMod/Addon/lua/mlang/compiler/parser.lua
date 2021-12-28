@@ -184,7 +184,7 @@ local function parse(ctx, tokens)
 
 	--- Parses symbol lookup
 	---@param base? BaseObject
-	---@return Get|Call
+	---@return Get|Call|Index
 	local function parseLookup(base)
 		local symbol = requireTok("symbol", "Expected variable or namespace name")
 		local ret
@@ -205,6 +205,18 @@ local function parse(ctx, tokens)
 			)
 		else --- Variable value lookup
 			ret = MLang.Objects.Get(symbol.line, symbol.col, symbol.value)
+		end
+
+		local indexing, openBracket = acceptTok("[")
+		if indexing then
+			ret = MLang.Objects.Index(
+				openBracket.line, openBracket.col,
+				ret, parseExpression()
+			)
+			
+			if not acceptTok("]") then
+				ctx:Throw("Missing closing bracket", openBracket.line, openBracket.col)
+			end
 		end
 
 		ret.base = base

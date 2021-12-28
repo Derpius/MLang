@@ -1,5 +1,9 @@
 MLang.Objects = {}
 
+function MLang.IsObjectOfType(object, type)
+	return object._constructor == type
+end
+
 ---@class BaseObject
 ---@field line integer
 ---@field col integer
@@ -139,6 +143,17 @@ function MLang.Objects.Call(line, col, symbol, args, template)
 	return {line = line, col = col, symbol = symbol, args = args, template = template or {}, _constructor = MLang.Objects.Call}
 end
 
-function MLang.IsObjectOfType(object, type)
-	return object._constructor == type
+---@class Index : BaseObject
+---@field container Call|Get
+---@field key BaseObject
+local index = {}
+
+--- Indexing an object
+---@param line integer
+---@param col integer
+---@param container Call|Get
+---@param key BaseObject
+---@return Get
+function MLang.Objects.Index(line, col, container, key)
+	return {line = line, col = col, container = container, key = key, _constructor = MLang.Objects.Index}
 end
