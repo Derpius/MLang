@@ -38,6 +38,6 @@ local Context = context.new
 ---@param col integer
 function context:Throw(msg, line, col)
 	self.error = ErrorDesc(msg, line, col)
-	error(msg)
+	error(string.format("[%i, %i]: %s", line, col, msg))
 end
 

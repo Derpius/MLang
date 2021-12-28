@@ -12,16 +12,15 @@ token.__index = token
 ---@param line integer
 ---@param col integer
 ---@return Token
-function token.new(category, value, line, col)
-	return {category = category, value = value, line = line, col = col}
+local function Token(category, value, line, col)
+	return setmetatable({category = category, value = value, line = line, col = col}, token)
 end
 
 function token:__tostring()
 	return string.format("Token<%s> [%i, %i] = %s", self.category, self.line, self.col, tostring(self.value))
 end
 
-MLang.Token = token.new
-local Token = token.new
+MLang.Token = Token
 
 --- Gets a character from a string at the specified index
 ---@param str string
@@ -34,7 +33,6 @@ end
 local MakeLUT, MakeStringLUT = MLang.Utils.MakeLUT, MLang.Utils.MakeStringLUT
 
 local KEYWORDS = MakeLUT({
-	"var",
 	"const",
 	"if",
 	"else",
@@ -51,7 +49,8 @@ local KEYWORDS = MakeLUT({
 	"operator",
 	"namespace",
 	"try",
-	"catch"
+	"catch",
+	"template"
 })
 
 local ESCAPE_CHARS = {
@@ -66,19 +65,19 @@ local ESCAPE_CHARS = {
 }
 
 local WHITESPACE = MakeStringLUT(" \t\r")
-local CONTROL = MakeStringLUT("(){}[],;.:")
+local CONTROL = MakeStringLUT("(){}[],;.:<>")
 local STRING = MakeStringLUT("'\"")
 local NUMBER = MakeStringLUT("0123456789.")
 
 -- All the chars that could ever possibly be an operator either by themselves or along side more
-local OPERATOR_CHARS = MakeStringLUT("|&!<>!=^~+-*/%")
+local OPERATOR_CHARS = MakeStringLUT("|&!=^~+-*/%")
 
 -- All operators with a valid assignment operator counterpart
-local ASSIGNMENT_OPS = MakeLUT({"|", "&", "<<", ">>", "+", "-", "*", "/", "//", "%"})
+local ASSIGNMENT_OPS = MakeLUT({"|", "&", "+", "-", "*", "/", "//", "%"})
 
 ---@param ctx Context
 ---@param code string
----@return table?
+---@return table<integer, Token>
 local function lex(ctx, code)
 	local tokens, numTokens, tokenStartCol = {}, 0, 0
 	local line, col = 1, 0
@@ -135,7 +134,20 @@ local function lex(ctx, code)
 					ctx:Throw("Invalid operator '" .. op .. "'", line, tokenStartCol)
 				end
 			elseif CONTROL[char] then -- Control characters
-				appendTok(char)
+				if char == "<" or char == ">" then -- Special condition to handle <> as a guaranteed operator
+					if code[charPtr] == char and code[charPtr + 1] == "=" then
+						charPtr = charPtr + 2
+						col = col + 2
+						appendTok("assignment", char .. char .. "=")
+					elseif code[charPtr] == "=" then
+						nextChar()
+						appendTok("operator", char .. "=")
+					else
+						appendTok(char)
+					end
+				else
+					appendTok(char)
+				end
 			elseif STRING[char] then -- Strings
 				local str, delim = "", char
 
@@ -162,7 +174,7 @@ local function lex(ctx, code)
 					end
 				end
 
-				appendTok("string", str)
+				appendTok("literal", str)
 			elseif NUMBER[char] then -- Numbers
 				local numString, decimalPlaceCount = char, char == "." and 1 or 0
 
@@ -176,7 +188,7 @@ local function lex(ctx, code)
 
 					numString = numString .. char
 				end
-				appendTok(decimalPlaceCount == 0 and "int" or "float", tonumber(numString))
+				appendTok("literal", tonumber(numString))
 			elseif char:match("[_%a]") then -- Symbols
 				local symbol = char
 
@@ -185,11 +197,11 @@ local function lex(ctx, code)
 				end
 
 				if KEYWORDS[symbol] then
-					appendTok("command", symbol)
+					appendTok("keyword", symbol)
 				elseif symbol == "true" or symbol == "false" then
-					appendTok("bool", symbol == "true")
+					appendTok("literal", symbol == "true")
 				elseif symbol == "null" then
-					appendTok("null")
+					appendTok("literal")
 				else
 					appendTok("symbol", symbol)
 				end
@@ -205,7 +217,7 @@ end
 --- Lexes MLang code into tokens
 ---@param ctx Context
 ---@param code string
----@return table?
+---@return table<integer, Token>?
 function MLang.Lex(ctx, code)
 	--[[local ret
 	pcall(function() ret = lex(ctx, code) end)

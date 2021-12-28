@@ -7,7 +7,7 @@ local operatorDesc = {}
 ---@param precedence integer
 ---@param unary? boolean
 ---@return OperatorDesc
-function operatorDesc.new(precedence, unary)
+local function OperatorDesc(precedence, unary)
 	if unary == nil then unary = false end
 
 	return {
@@ -16,9 +16,9 @@ function operatorDesc.new(precedence, unary)
 	}
 end
 
-MLang.OperatorDesc = operatorDesc.new
-local OperatorDesc = operatorDesc.new
+MLang.OperatorDesc = OperatorDesc
 
+---@type table<string, OperatorDesc>
 MLang.OPERATORS = {
 	-- Boolean
 	["||"] = OperatorDesc(1),
