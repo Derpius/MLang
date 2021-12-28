@@ -57,7 +57,7 @@ local function parse(ctx, tokens)
 		return tok
 	end
 
-	--- Parses a complete type
+	--- Parses template arguments used with type names and function calls
 	---@return Type
 	local function parseTemplateArguments()
 		if not acceptTok("<") then return {} end
@@ -75,7 +75,7 @@ local function parse(ctx, tokens)
 		return args
 	end
 
-	--- Parses template parameters (`template[TypeName,...]`)
+	--- Parses template parameters used when declaring a class or function (`template<TypeName,...>`)
 	---@return table
 	local function parseTemplateParams()
 		requireTok("<")
