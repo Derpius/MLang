@@ -495,10 +495,6 @@ local function parse(ctx, tokens)
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Try then
 				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Return then
-				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Template then
-				ctx:Throw("Not implemented yet", -1, -1)
 			else
 				ctx:Throw("Invalid keyword to start line", keyword.line, keyword.col)
 			end
