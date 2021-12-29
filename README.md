@@ -34,8 +34,7 @@ with the ability to disable them for increased performance once type safety has 
 
 ## Complex Syntax Example
 ```cpp
-template<Scalar>
-class Vector {
+class Vector<Scalar> {
 	public Scalar x, y, z;
 
 	Vector(Scalar n) {
@@ -58,7 +57,7 @@ class Vector {
 }
 
 Vector<float> vec1 = Vector<float>(2);
-Vector<float> vec2 = Vector<float>(.5);
+Vector<float> vec2 = Vector<float>(0.5);
 
 print(string((vec1 + vec2).x));
 
