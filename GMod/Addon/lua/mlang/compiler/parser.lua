@@ -57,9 +57,30 @@ local function parse(ctx, tokens)
 	end
 
 	--- Parses template arguments used with type names and function calls
+	---@param requireFunction? boolean
 	---@return Type
-	local function parseTemplateArguments()
-		if not acceptTok("<") then return {} end
+	local function parseTemplateArguments(requireFunction)
+		if not peekTok("<") then return {} end
+
+		if requireFunction then
+			local nest, ptr = 1, tokPtr + 1
+			while nest > 0 do
+				if not tokens[ptr] then
+					return {}
+				end
+				
+				if tokens[ptr].category == "<" then
+					nest = nest + 1
+				elseif tokens[ptr].category == ">" then
+					nest = nest - 1
+				end
+
+				ptr = ptr + 1
+			end
+			if tokens[ptr].category ~= "(" then return {} end
+		end
+		
+		getTok() -- consume opening angle bracket
 
 		local args, numArgs = {}, 0
 		repeat
@@ -75,7 +96,7 @@ local function parse(ctx, tokens)
 	end
 
 	--- Parses template parameters used when declaring a class or function (`template<TypeName,...>`)
-	---@return table
+	---@return string[]
 	local function parseTemplateParams()
 		requireTok("<")
 
@@ -129,8 +150,16 @@ local function parse(ctx, tokens)
 			constant, type, name.value
 		)
 
+		local templateParams = {}
+		if peekTok("<") then
+			templateParams = parseTemplateParams()
+			if not peekTok("(") then
+				ctx:Throw("Template parameters can only be used with functions and type names")
+			end
+		end
+
 		if peekTok("(") then
-			var.type = Objects.Function(name.line, name.col, type, parseParams())
+			var.type = Objects.Function(name.line, name.col, type, parseParams(), templateParams)
 			isFunction = true
 		end
 
@@ -194,12 +223,9 @@ local function parse(ctx, tokens)
 		local symbol = requireTok("symbol", "Expected variable or namespace name")
 		local ret
 
-		local templateArgs
+		local templateArgs = {}
 		if peekTok("<") then
-			templateArgs = parseTemplateArguments()
-			if not peekTok("(") then
-				ctx:Throw("Template arguments can only be used with functions and type names")
-			end
+			templateArgs = parseTemplateArguments(true)
 		end
 
 		if peekTok("(") then --- Function call
@@ -271,7 +297,7 @@ local function parse(ctx, tokens)
 				local angleBracket = tokens[tokPtr]
 				local op = angleBracket.category
 				
-				if tokens[tokPtr + 1] == op then
+				if tokens[tokPtr + 1] and tokens[tokPtr + 1].category == op then
 					return MLang.Token("operator", op .. op, angleBracket.line, angleBracket.col), 2
 				end
 				return MLang.Token("operator", op, angleBracket.line, angleBracket.col), 1
@@ -360,13 +386,16 @@ local function parse(ctx, tokens)
 	---@return BaseObject
 	local function parseLine()
 		if (
-			(peekTok("symbol") and tokens[tokPtr + 1].category == "symbol") or
+			(peekTok("symbol") and (tokens[tokPtr + 1].category == "symbol" or tokens[tokPtr + 1].category == "<")) or
 			(peekTok("keyword") and peekTok("keyword").value == Keyword.Const)
 		) then
 			local ret, isFunction = parseVariable()
 
 			if isFunction and peekTok("{") then
+				funcDepth = funcDepth + 1
 				ret.value = parseBlock()
+				funcDepth = funcDepth - 1
+
 				return ret
 			end
 
@@ -417,11 +446,45 @@ local function parse(ctx, tokens)
 				requireTok(";")
 				return ret
 			elseif keyword.value == Keyword.For then
-				ctx:Throw("Not implemented yet", -1, -1)
+				requireTok("(")
+
+				local iterator
+				if not peekTok(";") then -- allow skipping the definition of a loop variable
+					iterator = parseVariable()
+				end
+				requireTok(";")
+
+				local condition
+				if not peekTok(";") then
+					condition = parseExpression()
+				end
+				requireTok(";")
+
+				local incrementor
+				if not peekTok(")") then
+					local symbol = parseLookup()
+					if MLang.IsObjectOfType(symbol, Objects.Call) then
+						ctx:Throw("Expected variable assignment", symbol.line, symbol.col)
+					end
+					incrementor = parseSet(symbol)
+				end
+
+				requireTok(")")
+
+				loopDepth = loopDepth + 1
+				local block = parseBlock()
+				loopDepth = loopDepth - 1
+
+				return Objects.For(keyword.line, keyword.col, iterator, condition, incrementor, block)
 			elseif keyword.value == Keyword.Foreach then
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Return then
-				ctx:Throw("Not implemented yet", -1, -1)
+				local ret = Objects.Return(
+					keyword.line, keyword.col,
+					peekTok(";") and MLang.Objects.Literal(keyword.line, keyword.col) or parseExpression()
+				)
+				requireTok(";")
+				return ret
 			elseif keyword.value == Keyword.Break then
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Continue then

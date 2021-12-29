@@ -40,19 +40,20 @@ function MLang.Objects.Type(line, col, name, template)
 end
 
 ---@class Function : BaseObject
----@field type Type
+---@field retType Type
 ---@field params Variable[]
----@field block BaseObject[]
+---@field template string[]
 local func = {}
 
 --- Callable function object
 ---@param line integer
 ---@param col integer
----@param type Type
+---@param retType Type
 ---@param params Variable[]
+---@param template string[]
 ---@return Function
-function MLang.Objects.Function(line, col, type, params)
-	return {line = line, col = col, type = type, params = params, block = {}, _constructor = MLang.Objects.Function}
+function MLang.Objects.Function(line, col, retType, params, template)
+	return {line = line, col = col, retType = retType, params = params, template = template, _constructor = MLang.Objects.Function}
 end
 
 ---@class Operator : BaseObject
@@ -137,10 +138,10 @@ local call = {}
 ---@param col integer
 ---@param symbol string
 ---@param args BaseObject[]
----@param template? Type[]
+---@param template Type[]
 ---@return Call
 function MLang.Objects.Call(line, col, symbol, args, template)
-	return {line = line, col = col, symbol = symbol, args = args, template = template or {}, _constructor = MLang.Objects.Call}
+	return {line = line, col = col, symbol = symbol, args = args, template = template, _constructor = MLang.Objects.Call}
 end
 
 ---@class Index : BaseObject
@@ -189,4 +190,40 @@ local _while = {}
 ---@return While
 function MLang.Objects.While(line, col, condition, block, postcondition)
 	return {line = line, col = col, condition = condition, block = block, postcondition = postcondition, _constructor = MLang.Objects.While}
+end
+
+---@class For : BaseObject
+---@field iterator? Variable
+---@field condition? BaseObject
+---@field incrementor? Set
+---@field block BaseObject[]
+local _for = {}
+
+--- For loops
+---@param line integer
+---@param col integer
+---@param iterator? Variable
+---@param condition? BaseObject
+---@param incrementor? Set
+---@param block BaseObject[]
+---@return For
+function MLang.Objects.For(line, col, iterator, condition, incrementor, block)
+	return {
+		line = line, col = col,
+		iterator = iterator, condition = condition, incrementor = incrementor,
+		block = block, _constructor = MLang.Objects.For
+	}
+end
+
+---@class Return : BaseObject
+---@field expression BaseObject
+local _return = {}
+
+--- Returning from functions
+---@param line integer
+---@param col integer
+---@param expression BaseObject
+---@return Return
+function MLang.Objects.Return(line, col, expression)
+	return {line = line, col = col, expression = expression, _constructor = MLang.Objects.Return}
 end

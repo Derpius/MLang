@@ -51,8 +51,7 @@ local Keyword = {
 	Operator = 13,
 	Namespace = 14,
 	Try = 15,
-	Catch = 16,
-	Template = 17
+	Catch = 16
 }
 MLang.Keyword = Keyword
 
@@ -73,8 +72,7 @@ local KEYWORDS = {
 	["operator"] = Keyword.Operator,
 	["namespace"] = Keyword.Namespace,
 	["try"] = Keyword.Try,
-	["catch"] = Keyword.Catch,
-	["template"] = Keyword.Template
+	["catch"] = Keyword.Catch
 }
 
 
