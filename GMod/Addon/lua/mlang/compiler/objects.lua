@@ -25,18 +25,20 @@ function MLang.Objects.Literal(line, col, value)
 end
 
 ---@class Type : BaseObject
----@field name string
+---@field symbol string
 ---@field template Type[]
+---@field classPtr? Class Used when transpiling
+---@field signature? string Used when transpiling
 local type = {}
 
 --- A complete type including template arguments
 ---@param line integer
 ---@param col integer
----@param name string
+---@param symbol string
 ---@param template Type[]
 ---@return Type
-function MLang.Objects.Type(line, col, name, template)
-	return {line = line, col = col, name = name, template = template, _constructor = MLang.Objects.Type}
+function MLang.Objects.Type(line, col, symbol, template)
+	return {line = line, col = col, symbol = symbol, template = template, _constructor = MLang.Objects.Type}
 end
 
 ---@class Function : BaseObject
@@ -59,8 +61,8 @@ end
 ---@class Operator : BaseObject
 ---@field name string
 ---@field unary boolean
----@field lhs? BaseObject
----@field rhs BaseObject
+---@field lhs? Operator|Literal|Get|Call
+---@field rhs Operator|Literal|Get|Call
 local operator = {}
 
 --- Unary/binary operator containing the left and right hand side operands
@@ -242,11 +244,12 @@ function MLang.Objects.LoopControl(line, col, breaking)
 end
 
 ---@class Class : BaseObject
----@field name string
+---@field symbol string
 ---@field defined boolean
 ---@field privates Variable[]
 ---@field publics Variable[]
 ---@field constructors Variable[]
+---@field operators Variable[]
 ---@field extends? string
 ---@field baseTemplateArgs Type[]
 ---@field template? string[]
@@ -254,15 +257,15 @@ end
 --- Classes
 ---@param line integer
 ---@param col integer
----@param name string
+---@param symbol string
 ---@param template string[]
 ---@return Class
-function MLang.Objects.Class(line, col, name, template)
+function MLang.Objects.Class(line, col, symbol, template)
 	return {
 		line = line, col = col,
-		name = name, template = template,
+		symbol = symbol, template = template,
 		defined = false,
-		privates = {}, publics = {}, constructors = {},
+		privates = {}, publics = {}, constructors = {}, operators = {},
 		_constructor = MLang.Objects.Class
 	}
 end

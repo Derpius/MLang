@@ -8,7 +8,7 @@ include("mlang/compiler/objects.lua")
 include("mlang/compiler/operators.lua")
 include("mlang/compiler/lexer.lua")
 include("mlang/compiler/parser.lua")
---include("mlang/compiler/transpiler.lua")
+include("mlang/compiler/transpiler.lua")
 
 -- DEBUG CODE
 
@@ -17,7 +17,7 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	int x = 14 * 30;
+	num x = 9 * (3 + 28) / 7;
 ]]
 
 print("\nLEXING")
@@ -43,3 +43,15 @@ elseif not ast then
 end
 
 PrintTable(ast) -- TODO: better AST printing
+
+print("\nTRANSPILING")
+
+local lua = MLang.Transpile(context, ast)
+
+if context.error then
+	print(string.format("[%i, %i]: %s", context.error.line, context.error.col, context.error.message))
+elseif not lua then
+	print("Unknown error occured")
+end
+
+print(lua)

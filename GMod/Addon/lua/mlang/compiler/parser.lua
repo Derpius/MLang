@@ -152,7 +152,7 @@ local function parse(ctx, tokens)
 
 		local templateParams = parseTemplateParams()
 		if not peekTok("(") and #templateParams > 0 then
-			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col + #name.value)
+			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col)
 		end
 
 		if peekTok("(") then
@@ -415,28 +415,31 @@ local function parse(ctx, tokens)
 				numConstructors = numConstructors + 1
 				class.constructors[numConstructors] = constructor
 			else
-				local keyword = requireTok("keyword", "Expected public/private or a constructor")
-
-				if not MLang.Utils.MakeLUT({Keyword.Private, Keyword.Public})[keyword.value] then
-					ctx:Throw("Expected public/private or a constructor", keyword.line, keyword.col)
-				end
-
-				local public = keyword.value == Keyword.Public
-				local var, isFunction = parseVariable()
-				if isFunction and peekTok("{") then
-					funcDepth = funcDepth + 1
-					var.value = parseBlock()
-					funcDepth = funcDepth - 1
+				local keyword = requireTok("keyword", "Expected public/private/operator or a constructor")
+				if keyword.value == Keyword.Operator then
+					--
 				else
-					requireTok(";")
-				end
+					if not MLang.Utils.MakeLUT({Keyword.Private, Keyword.Public})[keyword.value] then
+						ctx:Throw("Expected public/private/operator or a constructor", keyword.line, keyword.col)
+					end
 
-				if public then
-					numPublics = numPublics + 1
-					class.publics[numPublics] = var
-				else
-					numPrivates = numPrivates + 1
-					class.privates[numPrivates] = var
+					local public = keyword.value == Keyword.Public
+					local var, isFunction = parseVariable()
+					if isFunction and peekTok("{") then
+						funcDepth = funcDepth + 1
+						var.value = parseBlock()
+						funcDepth = funcDepth - 1
+					else
+						requireTok(";")
+					end
+
+					if public then
+						numPublics = numPublics + 1
+						class.publics[numPublics] = var
+					else
+						numPrivates = numPrivates + 1
+						class.privates[numPrivates] = var
+					end
 				end
 			end
 		end
@@ -566,8 +569,6 @@ local function parse(ctx, tokens)
 			elseif keyword.value == Keyword.Class then
 				return parseClass()
 			elseif keyword.value == Keyword.Namespace then
-				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Operator then
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Try then
 				ctx:Throw("Not implemented yet", -1, -1)
