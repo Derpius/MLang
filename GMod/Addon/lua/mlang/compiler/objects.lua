@@ -227,3 +227,42 @@ local _return = {}
 function MLang.Objects.Return(line, col, expression)
 	return {line = line, col = col, expression = expression, _constructor = MLang.Objects.Return}
 end
+
+---@class LoopControl : BaseObject
+---@field breaking boolean
+local loopControl = {}
+
+--- Break and continue
+---@param line integer
+---@param col integer
+---@param breaking boolean
+---@return Return
+function MLang.Objects.LoopControl(line, col, breaking)
+	return {line = line, col = col, breaking = breaking, _constructor = MLang.Objects.LoopControl}
+end
+
+---@class Class : BaseObject
+---@field name string
+---@field defined boolean
+---@field privates Variable[]
+---@field publics Variable[]
+---@field constructors Variable[]
+---@field extends? string
+---@field baseTemplateArgs Type[]
+---@field template? string[]
+
+--- Classes
+---@param line integer
+---@param col integer
+---@param name string
+---@param template string[]
+---@return Class
+function MLang.Objects.Class(line, col, name, template)
+	return {
+		line = line, col = col,
+		name = name, template = template,
+		defined = false,
+		privates = {}, publics = {}, constructors = {},
+		_constructor = MLang.Objects.Class
+	}
+end

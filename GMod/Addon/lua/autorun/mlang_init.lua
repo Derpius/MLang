@@ -17,15 +17,15 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	List<T> make5ItemList<T>(T element) {
-		List<T> ret = List<T>(5);
-		for (int i = 0; i < 5; i += 1) {
-			ret[i] = element;
-		}
-		return ret;
-	}
+	class List<T> : Something {
+		private int length = 0;
 
-	List<string> list = make5ItemList<string>("hello world");
+		List(const int size = 0) {}
+
+		public int GetLength() {
+			return length;
+		}
+	}
 ]]
 
 print("\nLEXING")

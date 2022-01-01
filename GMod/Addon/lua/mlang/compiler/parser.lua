@@ -98,11 +98,11 @@ local function parse(ctx, tokens)
 	--- Parses template parameters used when declaring a class or function (`template<TypeName,...>`)
 	---@return string[]
 	local function parseTemplateParams()
-		requireTok("<")
+		if not acceptTok("<") then return {} end
 
 		local template, i = {}, 1
 		repeat
-			local symbol = requireTok("symbol")
+			local symbol = requireTok("symbol", "Expected type name in template parameters")
 			template[i] = symbol.value
 			i = i + 1
 		until not acceptTok(",")
@@ -150,12 +150,9 @@ local function parse(ctx, tokens)
 			constant, type, name.value
 		)
 
-		local templateParams = {}
-		if peekTok("<") then
-			templateParams = parseTemplateParams()
-			if not peekTok("(") then
-				ctx:Throw("Template parameters can only be used with functions and type names")
-			end
+		local templateParams = parseTemplateParams()
+		if not peekTok("(") and #templateParams > 0 then
+			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col + #name.value)
 		end
 
 		if peekTok("(") then
@@ -378,8 +375,74 @@ local function parse(ctx, tokens)
 		return parseSubExp(0)
 	end
 
+	--- Parse a class definition/declaration
+	---@return Class
 	local function parseClass()
+		local name = requireTok("symbol", "Expected class name")
+		local template = parseTemplateParams()
+		local class = Objects.Class(name.line, name.col, name.value, template)
 
+		local numConstructors, numPrivates, numPublics = 0, 0, 0
+
+		if acceptTok(":") then
+			class.extends = requireTok("symbol", "Expected class name").value
+			class.baseTemplateArgs = parseTemplateArguments()
+		end
+
+		if not acceptTok("{") then -- Declaration only
+			requireTok(";")
+			return class
+		end
+
+		while not acceptTok("}") do
+			if peekTok("symbol") and peekTok("symbol").value == name.value then -- Constructors
+				local symbol = getTok()
+
+				local constructor = Objects.Variable(
+					symbol.line, symbol.col,
+					true, Objects.Function(
+						symbol.line, symbol.col,
+						Objects.Type(name.line, name.col, name.value, {}), -- Template table here is empty, as whatever the class's template args are will be the return type
+						parseParams(), template
+					), symbol.value
+				)
+
+				funcDepth = funcDepth + 1
+				constructor.value = parseBlock()
+				funcDepth = funcDepth - 1
+				constructor.defined = true
+
+				numConstructors = numConstructors + 1
+				class.constructors[numConstructors] = constructor
+			else
+				local keyword = requireTok("keyword", "Expected public/private or a constructor")
+
+				if not MLang.Utils.MakeLUT({Keyword.Private, Keyword.Public})[keyword.value] then
+					ctx:Throw("Expected public/private or a constructor", keyword.line, keyword.col)
+				end
+
+				local public = keyword.value == Keyword.Public
+				local var, isFunction = parseVariable()
+				if isFunction and peekTok("{") then
+					funcDepth = funcDepth + 1
+					var.value = parseBlock()
+					funcDepth = funcDepth - 1
+				else
+					requireTok(";")
+				end
+
+				if public then
+					numPublics = numPublics + 1
+					class.publics[numPublics] = var
+				else
+					numPrivates = numPrivates + 1
+					class.privates[numPrivates] = var
+				end
+			end
+		end
+
+		class.defined = true
+		return class
 	end
 
 	--- Parses a line of code
@@ -479,19 +542,29 @@ local function parse(ctx, tokens)
 			elseif keyword.value == Keyword.Foreach then
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Return then
+				if funcDepth < 1 then
+					ctx:Throw("Return can only be used inside a function", keyword.line, keyword.col)
+				end
+
 				local ret = Objects.Return(
 					keyword.line, keyword.col,
 					peekTok(";") and MLang.Objects.Literal(keyword.line, keyword.col) or parseExpression()
 				)
 				requireTok(";")
 				return ret
-			elseif keyword.value == Keyword.Break then
-				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Continue then
-				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Break or keyword.value == Keyword.Continue then
+				if loopDepth < 1 then
+					ctx:Throw("Break and continue can only be used inside a loop", keyword.line, keyword.col)
+				end
+
+				local ret = Objects.LoopControl(keyword.line, keyword.col, keyword.value == Keyword.Break)
+				requireTok(";")
+				return ret
 			elseif keyword.value == Keyword.Class then
-				ctx:Throw("Not implemented yet", -1, -1)
+				return parseClass()
 			elseif keyword.value == Keyword.Namespace then
+				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Operator then
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Try then
 				ctx:Throw("Not implemented yet", -1, -1)
