@@ -478,14 +478,17 @@ local function parse(ctx, tokens)
 			if keyword.value == Keyword.If then
 				local ret = Objects.If(keyword.line, keyword.col, parseCondition(), parseBlock())
 
+				local deepestNode = ret
 				while peekTok("keyword") and peekTok("keyword").value == Keyword.Else do
 					local elseTok = getTok()
 					if not peekTok("keyword") or peekTok("keyword").value ~= Keyword.If then
-						ret.otherwise = parseBlock()
+						deepestNode.otherwise = parseBlock()
 						return ret
 					end
+					getTok() -- consume if keyword
 
-					ret.otherwise = Objects.If(elseTok.line, elseTok.col, parseCondition(), parseBlock())
+					deepestNode.otherwise = Objects.If(elseTok.line, elseTok.col, parseCondition(), parseBlock())
+					deepestNode = deepestNode.otherwise
 				end
 
 				return ret
