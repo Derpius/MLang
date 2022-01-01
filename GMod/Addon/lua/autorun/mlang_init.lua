@@ -17,15 +17,7 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	class List<T> : Something {
-		private int length = 0;
-
-		List(const int size = 0) {}
-
-		public int GetLength() {
-			return length;
-		}
-	}
+	int x = 14 * 30;
 ]]
 
 print("\nLEXING")
