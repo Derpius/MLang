@@ -34,37 +34,29 @@ with the ability to disable them for increased performance once type safety has 
 
 ## Complex Syntax Example
 ```cpp
-class Vector<Scalar> {
-	public Scalar x, y, z;
+class Example<T> {
+	private T privateMember;
+	public num i = 8;
 
-	Vector(Scalar n) {
-		self.x = n;
-		self.y = n;
-		self.z = n;
+	Example(T constructorParam) {
+		self.privateMember = constructorParam;
 	}
 
-	// Scalar z = 0 will cause a compile error if Scalar has no matching constructor
-	Vector(Scalar x, Scalar y, Scalar z = 0) {
-		self.x = x;
-		self.y = y;
-		self.z = z;
+	// Return types implicitly the same as the class declaration above
+	// Separate functions for reversable operands (will look for an op on lhs first, and if not present will check rhs)
+	operator +(Example<T> a, num b) {
+		return a.num + b;
 	}
-
-	// Return type is implicitly Vector<Scalar>
-	operator +(Vector<Scalar> b) {
-		return Vector<Scalar>(self.x + b.x, self.y + b.y, self.z + b.z);
+	operator +(num b, Example<T> a) {
+		return a.num + b;
 	}
 }
 
-Vector<float> vec1 = Vector<float>(2);
-Vector<float> vec2 = Vector<float>(0.5);
-
-print(string((vec1 + vec2).x));
-
-class Example {
-	Example() {}
+num MakeExample(num n) {
+	return Example<num>(n).i;
 }
 
-// Class Example has no constructor that takes an int or float
-Vector<Example> thisWillError;
+num MakeExample(string s) { // function overloads (same method reversable operators use)
+	return Example<string>(s).i;
+}
 ```
