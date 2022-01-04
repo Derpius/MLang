@@ -156,7 +156,11 @@ local function parse(ctx, tokens)
 
 		local templateParams = parseTemplateParams()
 		if peekTok("(") then
-			var.type = Objects.Function(name.line, name.col, type, parseParams(), templateParams)
+			var = Objects.Function(
+				name.line, name.col,
+				constant, type, name.value,
+				parseParams(), templateParams
+			)
 
 			if peekTok("{") then
 				funcDepth = funcDepth + 1
@@ -396,7 +400,6 @@ local function parse(ctx, tokens)
 
 		if acceptTok(":") then
 			class.extends = parseType()
-			class.baseTemplateArgs = parseTemplateArguments()
 		end
 
 		requireTok("{")
@@ -404,13 +407,10 @@ local function parse(ctx, tokens)
 			if peekTok("symbol") and peekTok("symbol").value == name.value then -- Constructors
 				local symbol = getTok()
 
-				local constructor = Objects.Variable(
+				local constructor = Objects.Function(
 					symbol.line, symbol.col,
-					true, Objects.Function(
-						symbol.line, symbol.col,
-						Objects.Type(name.line, name.col, name.value, {}), -- Template table here is empty, as whatever the class's template args are will be the return type
-						parseParams(), template
-					), symbol.value
+					true, Objects.Type(name.line, name.col, name.value, {}), symbol.value,
+					parseParams(), template
 				)
 
 				funcDepth = funcDepth + 1

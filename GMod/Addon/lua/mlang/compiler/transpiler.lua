@@ -4,7 +4,7 @@ local Objects, IsObjectOfType = MLang.Objects, MLang.IsObjectOfType
 local hashFunc = util.SHA256
 
 ---@class Scope
----@field symbols table<string, Variable|Class>
+---@field symbols table<string, Variable|Function|Class>
 ---@field returnType? Type Expected return type of the current scope
 local scope = {}
 
@@ -253,12 +253,10 @@ local function transpile(ctx, ast)
 	end
 
 	--- Pushes a new scope to the stack and returns it
-	---@return Scope
-	local function pushScope()
-		local scope = Scope()
+	---@param scope Scope
+	local function pushScope(scope)
 		scopePtr = scopePtr + 1
 		scopes[scopePtr] = scope
-		return scope
 	end
 
 	--- Pops the current scope from the stack
@@ -270,7 +268,7 @@ local function transpile(ctx, ast)
 	end
 
 	--- Declares a symbol in the current scope
-	---@param object Variable|Class
+	---@param object Variable|Function|Class
 	local function declareSymbol(object)
 		if BaseClasses[object.symbol] or scopes[scopePtr].symbols[object.symbol] then
 			ctx:Throw("Attempted to redeclare symbol", object.line, object.col)
@@ -281,7 +279,7 @@ local function transpile(ctx, ast)
 
 	--- Looks for a symbol in the current and all parent scopes, returns nil if not found
 	---@param name string
-	---@return Variable|Class?
+	---@return Variable|Function|Class?
 	local function lookupSymbol(name)
 		if BaseClasses[name] then
 			return BaseClasses[name]
@@ -296,7 +294,7 @@ local function transpile(ctx, ast)
 
 	--- Requires a symbol to be declared
 	---@param operation Get|Set|Call|Index|Type
-	---@return Variable|Class
+	---@return Variable|Function|Class
 	local function requireSymbol(operation)
 		local symbol = lookupSymbol(operation.symbol)
 		if not symbol then
@@ -306,19 +304,19 @@ local function transpile(ctx, ast)
 	end
 
 	--- Requires a variable to be declared
-	---@param operation Get|Set|Call|Index
-	---@return Variable
+	---@param operation Get|Set|Index
+	---@return Variable|Function
 	local function requireVariable(operation)
 		local symbol = requireSymbol(operation)
-		if not IsObjectOfType(symbol, Objects.Variable) then
+		if not IsObjectOfType(symbol, Objects.Variable) and not IsObjectOfType(symbol, Objects.Function) then
 			ctx:Throw("Type name not allowed", operation.line, operation.col)
 		end
 		return symbol
 	end
 
 	--- Requires a variable to be defined
-	---@param operation Get|Set|Call|Index
-	---@return Variable
+	---@param operation Get|Set|Index
+	---@return Variable|Function
 	local function requireDefinedVariable(operation)
 		local var = requireVariable(operation)
 		if not var.defined then
@@ -390,7 +388,7 @@ local function transpile(ctx, ast)
 	end
 
 	--- Compiles a variable into its Lua name
-	---@param var Variable
+	---@param var Variable|Function
 	---@return string
 	local function compileVarName(var)
 		return ("%s_%s"):format(var.symbol, var.type.signature)
@@ -405,7 +403,7 @@ local function transpile(ctx, ast)
 	---@return string code Compiled code to get this variable
 	---@return Type type Type of the symbol
 	local function compileLookup(action)
-		---@type Variable
+		---@type Variable|Function
 		local var
 
 		local accessor = ""
@@ -426,30 +424,25 @@ local function transpile(ctx, ast)
 		if IsObjectOfType(action, Objects.Get) then
 			return accessor .. compileVarName(var), var.type
 		elseif IsObjectOfType(action, Objects.Call) then -- TODO: templating
-			if not IsObjectOfType(var.type, Objects.Function) then
+			if not IsObjectOfType(var, Objects.Function) then
 				ctx:Throw("Attempted to call non-function", action.line, action.col)
 			end
 
-			local argStr, argStrLen = {}, 0
+			local argStr, argStrLen, paramSignature = {}, 0, ""
 			for i, arg in ipairs(action.args) do
-				if not var.type.params[i] then
-					ctx:Throw(("Too many arguments specified, expected %i, got %i"):format(#var.type.params, #action.args), action.line, action.col)
-				end
-
 				local expression, type = compileExpression(arg)
-				checkType(var.type.params[i].type, type, arg)
+				paramSignature = paramSignature .. type.signature
 
 				argStrLen = argStrLen + 1
 				argStr[argStrLen] = expression
 			end
+			paramSignature = hashFunc(paramSignature)
 
-			for i = argStrLen + 1, #var.type.params do
-				if not var.type.params[i].defined then
-					ctx:Throw("Not enough arguments specified", action.line, action.col)
-				end
+			if not var.overloads[paramSignature] then
+				ctx:Throw("Function '" .. var.symbol .. "' has no matching overload", action.line, action.col)
 			end
 
-			return ("%s%s(%s)"):format(accessor, compileVarName(var), table.concat(argStr, ", ")), var.type.retType
+			return ("%s%s_%s(%s)"):format(accessor, compileVarName(var), paramSignature, table.concat(argStr, ", ")), var.type
 		else
 			-- TODO: indexing
 		end
@@ -553,6 +546,10 @@ local function transpile(ctx, ast)
 			if IsObjectOfType(operand, Objects.Operator) then
 				return compileOperator(operand)
 			elseif IsObjectOfType(operand, Objects.Literal) then
+				if type(operand.value) == "string" then
+					operand.value = '"' .. operand.value .. '"'
+				end
+				
 				return operand.value, BaseTypes[LuaLiteralToMLangType(operand.value)], true
 			elseif IsObjectOfType(operand, Objects.Get) or IsObjectOfType(operand, Objects.Call) then
 				return compileLookup(operand)
@@ -564,51 +561,54 @@ local function transpile(ctx, ast)
 	end
 
 	--- Compiles variable declaration
-	---@param declaration Variable
+	---@param declaration Variable|Function
 	---@return string
 	local function compileDeclaration(declaration)
-		if IsObjectOfType(declaration.type, Objects.Function) then
-			local ret, ptr = {}, 1
-			local function append(str)
-				ret[ptr] = str
-				ptr = ptr + 1
-			end
-
-			local overloadId = 1
-			if lookupSymbol(declaration.symbol) then
-				local existingFunc = requireVariable(declaration)
-				-- TODO: implement function overloads
-			else
-				declareSymbol(declaration)
-			end
-
-			local functionScope = pushScope()
+		if IsObjectOfType(declaration, Objects.Function) then
+			local functionScope = Scope()
 
 			-- TODO: add template symbols here
 
-			compileType(declaration.type.retType)
-			declaration.type.signature = hashFunc(declaration.type.retType.signature .. tostring(overloadId))
-			functionScope.returnType = declaration.type.retType
+			compileType(declaration.type)
+			functionScope.returnType = declaration.type
 
-			if not declaration.defined then
-				return compileVarName(declaration)
+			local params, paramSignature = {}, ""
+			pushScope(functionScope)
+			for i, param in ipairs(declaration.params) do
+				params[i] = compileDeclaration(param)
+				paramSignature = paramSignature .. param.type.signature
 			end
-
-			append("function " .. compileVarName(declaration) .. "(")
-			for i, param in ipairs(declaration.type.params) do
-				append(compileDeclaration(param))
-				if declaration.type.params[i + 1] then append(", ") end
-			end
-			append(")\n")
-
-			for _, node in ipairs(declaration.value) do
-				append(compileLine(node))
-			end
-
-			append("end")
 			popScope()
+			paramSignature = hashFunc(paramSignature)
 
-			return table.concat(ret)
+			local existingSymbol = getScope().symbols[declaration.symbol] -- Only look in the current scope for overloadables
+			if (
+				existingSymbol and
+				IsObjectOfType(existingSymbol, Objects.Function)
+			) then
+				if existingSymbol.overloads[paramSignature] then
+					ctx:Throw("Function overload already defined", declaration.line, declaration.col)
+				end
+				existingSymbol.overloads[paramSignature] = true
+			else
+				declaration.overloads = {[paramSignature] = true}
+				declareSymbol(declaration)
+			end
+
+			local lines = {}
+			if declaration.defined then
+				pushScope(functionScope)
+				for i, node in ipairs(declaration.value) do
+					lines[i] = compileLine(node)
+				end
+				popScope()
+			end
+
+			return ("function %s_%s(%s)\n%s\nend"):format(
+				compileVarName(declaration), paramSignature,
+				table.concat(params, ", "),
+				table.concat(lines, "\n")
+			)
 		end
 
 		declareSymbol(declaration)
@@ -627,14 +627,12 @@ local function transpile(ctx, ast)
 	---@param object Variable|Class|Set|Call|Return
 	---@return string
 	function compileLine(object)
-		local ret
-
-		if IsObjectOfType(object, Objects.Variable) then
-			ret = "local " .. compileDeclaration(object)
+		if IsObjectOfType(object, Objects.Variable) or IsObjectOfType(object, Objects.Function) then
+			return "local " .. compileDeclaration(object)
 		elseif IsObjectOfType(object, Objects.Set) then
-			ret = compileSet(object)
+			return compileSet(object)
 		elseif IsObjectOfType(object, Objects.Call) then
-			ret = compileLookup(object)
+			return compileLookup(object)
 		elseif IsObjectOfType(object, Objects.Return) then
 			local functionScope = getScope()
 			if not functionScope.returnType then
@@ -643,17 +641,15 @@ local function transpile(ctx, ast)
 
 			local expression, type = compileExpression(object.expression)
 			checkType(functionScope.returnType, type, object, "Invalid return type")
-			ret = ("do return %s end"):format(expression)
+			return ("do return %s end"):format(expression)
 		end
-
-		return ret .. "\n"
 	end
 
 	--#endregion
 
 	local code, codePtr = {}, 1
 	for _, node in ipairs(ast) do
-		code[codePtr] = compileLine(node)
+		code[codePtr] = compileLine(node) .. "\n"
 		codePtr = codePtr + 1
 	end
 

@@ -41,24 +41,6 @@ function MLang.Objects.Type(line, col, symbol, template)
 	return {line = line, col = col, symbol = symbol, template = template, _constructor = MLang.Objects.Type}
 end
 
----@class Function : BaseObject
----@field retType Type
----@field params Variable[]
----@field template string[]
----@field signature? string Used when transpiling
-local func = {}
-
---- Callable function object
----@param line integer
----@param col integer
----@param retType Type
----@param params Variable[]
----@param template string[]
----@return Function
-function MLang.Objects.Function(line, col, retType, params, template)
-	return {line = line, col = col, retType = retType, params = params, template = template, _constructor = MLang.Objects.Function}
-end
-
 ---@class Operator : BaseObject
 ---@field name string
 ---@field unary boolean
@@ -80,17 +62,17 @@ end
 
 ---@class Variable : BaseObject
 ---@field constant boolean
----@field type Type|Function
+---@field type Type
 ---@field symbol string
 ---@field defined boolean
----@field value? BaseObject|BaseObject[]
+---@field value? BaseObject
 local variable = {}
 
 --- Any defined symbol
 ---@param line integer
 ---@param col integer
 ---@param constant boolean
----@param type Type|Function
+---@param type Type
 ---@param symbol string
 ---@return Variable
 function MLang.Objects.Variable(line, col, constant, type, symbol)
@@ -99,6 +81,33 @@ function MLang.Objects.Variable(line, col, constant, type, symbol)
 		constant = constant, type = type, symbol = symbol,
 		defined = false,
 		_constructor = MLang.Objects.Variable
+	}
+end
+
+
+---@class Function : Variable
+---@field params Variable[]
+---@field template string[]
+---@field overloads? table<string, boolean> Used when transpiling
+---@field value? BaseObject[]
+local func = {}
+
+--- Callable function object
+---@param line integer
+---@param col integer
+---@param constant boolean
+---@param type Type
+---@param symbol string
+---@param params Variable[]
+---@param template string[]
+---@return Function
+function MLang.Objects.Function(line, col, constant, type, symbol, params, template)
+	return {
+		line = line, col = col,
+		constant = constant, type = type, symbol = symbol,
+		params = params, template = template,
+		defined = false,
+		_constructor = MLang.Objects.Function
 	}
 end
 
@@ -249,10 +258,9 @@ end
 ---@field defined boolean
 ---@field privates table<string, Variable>
 ---@field publics table<string, Variable>
----@field constructors table<string, Variable>
+---@field constructors Variable[]
 ---@field operators table<string, Variable>
 ---@field extends? Type
----@field baseTemplateArgs Type[]
 ---@field template? string[]
 
 --- Classes

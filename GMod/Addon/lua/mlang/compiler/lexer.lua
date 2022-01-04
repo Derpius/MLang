@@ -183,6 +183,8 @@ local function lex(ctx, code)
 
 					if char == delim then
 						break
+					elseif char == "'" or char == '"' then -- Prevent escaping out of a string ('"' would compile to lua as """)
+						str = str .. "\\" .. char
 					elseif char == "\\" then
 						char = nextChar()
 

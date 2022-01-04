@@ -21,7 +21,13 @@ local code = [[
 		return n;
 	}
 
+	num double(string s) {
+		return 4;
+	}
+
 	num doubled = double(3);
+	num doubled2 = double("hello world");
+	num error = double();
 ]]
 
 print("\nLEXING")
