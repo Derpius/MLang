@@ -58,7 +58,7 @@ local function parse(ctx, tokens)
 
 	--- Parses template arguments used with type names and function calls
 	---@param requireFunction? boolean
-	---@return Type
+	---@return Type[]
 	local function parseTemplateArguments(requireFunction)
 		if not peekTok("<") then return {} end
 
@@ -128,10 +128,17 @@ local function parse(ctx, tokens)
 	---@type fun(): BaseObject[]
 	local parseBlock
 
-	--- Parses variable declaration/definition
+	--- Parses a complete type
+	---@return Type
+	local function parseType()
+		local typeName = requireTok("symbol", "Type name expected")
+		return MLang.Objects.Type(typeName.line, typeName.col, typeName.value, parseTemplateArguments())
+	end
+
+	--- Parses variable declaration
+	---@param ignoreSemicolon? boolean Whether or not to require a semicolon after the declaration
 	---@return Variable
-	---@return boolean isFunction
-	local function parseVariable()
+	local function parseVariable(ignoreSemicolon)
 		local constant = false
 		local cmdPresent, cmd = acceptTok("keyword")
 		if cmdPresent then
@@ -141,23 +148,26 @@ local function parse(ctx, tokens)
 			constant = true
 		end
 
-		local typeName = requireTok("symbol", "Type name expected")
-		local type, name = MLang.Objects.Type(typeName.line, typeName.col, typeName.value, parseTemplateArguments()), requireTok("symbol", "Variable name expected")
-		local isFunction = false
-
+		local type, name = parseType(), requireTok("symbol", "Variable name expected")
 		local var = Objects.Variable(
 			name.line, name.col,
 			constant, type, name.value
 		)
 
 		local templateParams = parseTemplateParams()
-		if not peekTok("(") and #templateParams > 0 then
-			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col)
-		end
-
 		if peekTok("(") then
 			var.type = Objects.Function(name.line, name.col, type, parseParams(), templateParams)
-			isFunction = true
+
+			if peekTok("{") then
+				funcDepth = funcDepth + 1
+				var.value = parseBlock()
+				funcDepth = funcDepth - 1
+
+				var.defined = true
+				return var
+			end
+		elseif #templateParams > 0 then
+			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col)
 		end
 
 		local isAssignment, tok = acceptTok("assignment")
@@ -170,7 +180,10 @@ local function parse(ctx, tokens)
 			end
 		end
 
-		return var, isFunction and not isAssignment
+		if not ignoreSemicolon then
+			requireTok(";")
+		end
+		return var
 	end
 
 	function parseParams()
@@ -180,7 +193,7 @@ local function parse(ctx, tokens)
 
 		repeat
 			numParams = numParams + 1
-			params[numParams] = parseVariable()
+			params[numParams] = parseVariable(true)
 		until not acceptTok(",")
 
 		requireTok(")")
@@ -220,10 +233,7 @@ local function parse(ctx, tokens)
 		local symbol = requireTok("symbol", "Expected variable or namespace name")
 		local ret
 
-		local templateArgs = {}
-		if peekTok("<") then
-			templateArgs = parseTemplateArguments(true)
-		end
+		local templateArgs = parseTemplateArguments(true)
 
 		if peekTok("(") then --- Function call
 			ret = MLang.Objects.Call(
@@ -241,7 +251,7 @@ local function parse(ctx, tokens)
 				openBracket.line, openBracket.col,
 				ret, parseExpression()
 			)
-			
+
 			if not acceptTok("]") then
 				ctx:Throw("Missing closing bracket", openBracket.line, openBracket.col)
 			end
@@ -273,7 +283,7 @@ local function parse(ctx, tokens)
 
 			return setter
 		end
-		
+
 		local setter = Objects.Set(assignmentTok.line, assignmentTok.col, getter.symbol, parseExpression())
 		setter.base = getter.base
 
@@ -382,18 +392,14 @@ local function parse(ctx, tokens)
 		local template = parseTemplateParams()
 		local class = Objects.Class(name.line, name.col, name.value, template)
 
-		local numConstructors, numPrivates, numPublics = 0, 0, 0
+		local numConstructors = 0
 
 		if acceptTok(":") then
-			class.extends = requireTok("symbol", "Expected class name").value
+			class.extends = parseType()
 			class.baseTemplateArgs = parseTemplateArguments()
 		end
 
-		if not acceptTok("{") then -- Declaration only
-			requireTok(";")
-			return class
-		end
-
+		requireTok("{")
 		while not acceptTok("}") do
 			if peekTok("symbol") and peekTok("symbol").value == name.value then -- Constructors
 				local symbol = getTok()
@@ -412,73 +418,71 @@ local function parse(ctx, tokens)
 				funcDepth = funcDepth - 1
 				constructor.defined = true
 
-				numConstructors = numConstructors + 1
 				class.constructors[numConstructors] = constructor
 			else
 				local keyword = requireTok("keyword", "Expected public/private/operator or a constructor")
 				if keyword.value == Keyword.Operator then
-					--
+					-- TODO: Operator parsing
 				else
 					if not MLang.Utils.MakeLUT({Keyword.Private, Keyword.Public})[keyword.value] then
 						ctx:Throw("Expected public/private/operator or a constructor", keyword.line, keyword.col)
 					end
 
 					local public = keyword.value == Keyword.Public
-					local var, isFunction = parseVariable()
-					if isFunction and peekTok("{") then
-						funcDepth = funcDepth + 1
-						var.value = parseBlock()
-						funcDepth = funcDepth - 1
-					else
-						requireTok(";")
+					local var = parseVariable()
+
+					if class.publics[var.symbol] or class.privates[var.symbol] then
+						ctx:Throw("Redeclaration of class member", var.line, var.col)
 					end
 
 					if public then
-						numPublics = numPublics + 1
-						class.publics[numPublics] = var
+						class.publics[var.symbol] = var
 					else
-						numPrivates = numPrivates + 1
-						class.privates[numPrivates] = var
+						class.privates[var.symbol] = var
 					end
 				end
 			end
 		end
 
-		class.defined = true
 		return class
 	end
 
 	--- Parses a line of code
 	---@return BaseObject
 	local function parseLine()
-		if (
-			(peekTok("symbol") and (tokens[tokPtr + 1].category == "symbol" or tokens[tokPtr + 1].category == "<")) or
-			(peekTok("keyword") and peekTok("keyword").value == Keyword.Const)
-		) then
-			local ret, isFunction = parseVariable()
+		if peekTok("symbol") then
+			--[[
+				A line starting with a symbol can either be variable declaration/definition, or a function call
+				<symbol><template?><symbol> Declaration, where the first symbol is the type
+				<symbol><template?>(        Function call
+				<symbol>...                 Definition
+			]]
 
-			if isFunction and peekTok("{") then
-				funcDepth = funcDepth + 1
-				ret.value = parseBlock()
-				funcDepth = funcDepth - 1
+			local oldPtr = tokPtr
+			getTok()
+			parseTemplateArguments()
 
+			if peekTok("symbol") then -- Must be a declaration, anything else would have an opening bracket or assignment/.
+				tokPtr = oldPtr
+				return parseVariable()
+			else
+				tokPtr = oldPtr
+
+				local ret = parseLookup()
+				if not MLang.IsObjectOfType(ret, Objects.Call) then
+					ret = parseSet(ret)
+				end
+
+				requireTok(";")
 				return ret
 			end
-
-			requireTok(";")
-			return ret
-		elseif peekTok("symbol") then
-			local ret = parseLookup()
-			if not MLang.IsObjectOfType(ret, Objects.Call) then
-				ret = parseSet(ret)
-			end
-
-			requireTok(";")
-			return ret
 		elseif peekTok("keyword") then
 			local keyword = getTok()
 
-			if keyword.value == Keyword.If then
+			if keyword.value == Keyword.Const then
+				tokPtr = tokPtr - 1 -- parseVariable needs to get the const token itself
+				return parseVariable()
+			elseif keyword.value == Keyword.If then
 				local ret = Objects.If(keyword.line, keyword.col, parseCondition(), parseBlock())
 
 				local deepestNode = ret
@@ -575,6 +579,9 @@ local function parse(ctx, tokens)
 			else
 				ctx:Throw("Invalid keyword to start line", keyword.line, keyword.col)
 			end
+		else
+			local tok = getTok()
+			ctx:Throw("Unexpected '" .. tok.category .. "' to start line", tok.line, tok.col)
 		end
 	end
 

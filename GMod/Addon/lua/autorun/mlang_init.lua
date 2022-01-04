@@ -17,7 +17,11 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	num x = 9 * (3 + 28) / 7;
+	num double(num n) {
+		return n;
+	}
+
+	num doubled = double(3);
 ]]
 
 print("\nLEXING")
@@ -54,4 +58,4 @@ elseif not lua then
 	print("Unknown error occured")
 end
 
-print(lua)
+--print(lua)

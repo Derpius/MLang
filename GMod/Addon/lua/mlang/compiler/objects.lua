@@ -8,7 +8,7 @@ end
 ---@field line integer
 ---@field col integer
 ---@field _constructor function
----@field base? BaseObject
+---@field base? Get|Call|Index
 local baseObject = {}
 
 ---@class Literal : BaseObject
@@ -45,6 +45,7 @@ end
 ---@field retType Type
 ---@field params Variable[]
 ---@field template string[]
+---@field signature? string Used when transpiling
 local func = {}
 
 --- Callable function object
@@ -116,7 +117,7 @@ end
 
 ---@class Set : BaseObject
 ---@field symbol string
----@param value BaseObject
+---@field value BaseObject
 local set = {}
 
 --- Setting the value of a symbol
@@ -246,11 +247,11 @@ end
 ---@class Class : BaseObject
 ---@field symbol string
 ---@field defined boolean
----@field privates Variable[]
----@field publics Variable[]
----@field constructors Variable[]
----@field operators Variable[]
----@field extends? string
+---@field privates table<string, Variable>
+---@field publics table<string, Variable>
+---@field constructors table<string, Variable>
+---@field operators table<string, Variable>
+---@field extends? Type
 ---@field baseTemplateArgs Type[]
 ---@field template? string[]
 
