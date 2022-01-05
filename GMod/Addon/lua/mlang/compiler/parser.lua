@@ -166,8 +166,6 @@ local function parse(ctx, tokens)
 				funcDepth = funcDepth + 1
 				var.value = parseBlock()
 				funcDepth = funcDepth - 1
-
-				var.defined = true
 				return var
 			end
 		elseif #templateParams > 0 then
@@ -178,7 +176,6 @@ local function parse(ctx, tokens)
 		if isAssignment then
 			if not tok.value then
 				var.value = parseExpression()
-				var.defined = true
 			else
 				ctx:Throw("Assignment operator not allowed in definition", tok.line, tok.col)
 			end
@@ -416,7 +413,6 @@ local function parse(ctx, tokens)
 				funcDepth = funcDepth + 1
 				constructor.value = parseBlock()
 				funcDepth = funcDepth - 1
-				constructor.defined = true
 
 				class.constructors[numConstructors] = constructor
 			else

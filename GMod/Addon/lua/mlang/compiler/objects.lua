@@ -64,7 +64,6 @@ end
 ---@field constant boolean
 ---@field type Type
 ---@field symbol string
----@field defined boolean
 ---@field value? BaseObject
 local variable = {}
 
@@ -79,7 +78,6 @@ function MLang.Objects.Variable(line, col, constant, type, symbol)
 	return {
 		line = line, col = col,
 		constant = constant, type = type, symbol = symbol,
-		defined = false,
 		_constructor = MLang.Objects.Variable
 	}
 end

@@ -314,17 +314,6 @@ local function transpile(ctx, ast)
 		return symbol
 	end
 
-	--- Requires a variable to be defined
-	---@param operation Get|Set|Index
-	---@return Variable|Function
-	local function requireDefinedVariable(operation)
-		local var = requireVariable(operation)
-		if not var.defined then
-			ctx:Throw("'" .. operation.symbol .. "' is undefined", operation.line, operation.col)
-		end
-		return var
-	end
-
 	--- Requires a type to be declared
 	---@param operation Type
 	---@return Class
@@ -334,17 +323,6 @@ local function transpile(ctx, ast)
 			ctx:Throw("Variable name not allowed", operation.line, operation.col)
 		end
 		return symbol
-	end
-
-	--- Requires a type to be defined
-	---@param operation Type
-	---@return Class
-	local function requireDefinedType(operation)
-		local class = requireType(operation)
-		if not class.defined then
-			ctx:Throw("Incomplete type not allowed", operation.line, operation.col)
-		end
-		return class
 	end
 
 	--#endregion
@@ -470,15 +448,12 @@ local function transpile(ctx, ast)
 			var = requireVariable(definition)
 		end
 
-		if var.defined and var.constant then
+		if var.constant then
 			ctx:Throw("Attempted to redefine a constant variable", definition.line, definition.col)
 		end
 
 		local expression, expType = compileExpression(definition.value)
 		checkType(var.type, expType, definition)
-
-		var.defined = true
-		var.value = definition.value
 		return ("%s%s = %s"):format(accessor, compileVarName(var), expression)
 	end
 
@@ -596,7 +571,7 @@ local function transpile(ctx, ast)
 			end
 
 			local lines = {}
-			if declaration.defined then
+			if declaration.value then -- TODO: actual default def as call to default constructor (or default literal)
 				pushScope(functionScope)
 				for i, node in ipairs(declaration.value) do
 					lines[i] = compileLine(node)
@@ -614,7 +589,7 @@ local function transpile(ctx, ast)
 		declareSymbol(declaration)
 		compileType(declaration.type)
 
-		if not declaration.defined then
+		if not declaration.value then -- TODO: actual default def as call to default constructor (or default literal)
 			return compileVarName(declaration)
 		end
 
