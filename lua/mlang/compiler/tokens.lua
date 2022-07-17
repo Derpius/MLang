@@ -1,46 +1,46 @@
 --- Enum of all MLang keywords
 MLang.KEYWORD = {
-	Const = 0,
-	If = 1,
-	Else = 2,
-	While = 3,
-	Do = 4,
-	For = 5,
-	Foreach = 6,
-	Return = 7,
-	Break = 8,
-	Continue = 9,
-	Class = 10,
-	Private = 11,
-	Public = 12,
-	Operator = 13,
-	Namespace = 14,
-	Try = 15,
-	Catch = 16,
-	Server = 17,
-	Client = 18
+	["const"] = 0,
+	["if"] = 1,
+	["else"] = 2,
+	["while"] = 3,
+	["do"] = 4,
+	["for"] = 5,
+	["foreach"] = 6,
+	["return"] = 7,
+	["break"] = 8,
+	["continue"] = 9,
+	["class"] = 10,
+	["private"] = 11,
+	["public"] = 12,
+	["operator"] = 13,
+	["namespace"] = 14,
+	["try"] = 15,
+	["catch"] = 16,
+	["server"] = 17,
+	["client"] = 18
 }
 
 ---@alias Keyword
----| `MLang.KEYWORD.Const`
----| `MLang.KEYWORD.If`
----| `MLang.KEYWORD.Else`
----| `MLang.KEYWORD.While`
----| `MLang.KEYWORD.Do`
----| `MLang.KEYWORD.For`
----| `MLang.KEYWORD.Foreach`
----| `MLang.KEYWORD.Return`
----| `MLang.KEYWORD.Break`
----| `MLang.KEYWORD.Continue`
----| `MLang.KEYWORD.Class`
----| `MLang.KEYWORD.Private`
----| `MLang.KEYWORD.Public`
----| `MLang.KEYWORD.Operator`
----| `MLang.KEYWORD.Namespace`
----| `MLang.KEYWORD.Try`
----| `MLang.KEYWORD.Catch`
----| `MLang.KEYWORD.Server`
----| `MLang.KEYWORD.Client`
+---| `MLang.KEYWORD.const`
+---| `MLang.KEYWORD.if`
+---| `MLang.KEYWORD.else`
+---| `MLang.KEYWORD.while`
+---| `MLang.KEYWORD.do`
+---| `MLang.KEYWORD.for`
+---| `MLang.KEYWORD.foreach`
+---| `MLang.KEYWORD.return`
+---| `MLang.KEYWORD.break`
+---| `MLang.KEYWORD.continue`
+---| `MLang.KEYWORD.class`
+---| `MLang.KEYWORD.private`
+---| `MLang.KEYWORD.public`
+---| `MLang.KEYWORD.operator`
+---| `MLang.KEYWORD.namespace`
+---| `MLang.KEYWORD.try`
+---| `MLang.KEYWORD.catch`
+---| `MLang.KEYWORD.server`
+---| `MLang.KEYWORD.client`
 
 ---@class Tokens.Base
 ---@field line integer
@@ -58,10 +58,23 @@ Tokens = {}
 
 --- Returns true if the token is of the type specified
 ---@param token Tokens.Base
----@param type table
+---@param type Tokens.Base
 ---@return boolean
 function MLang.IsTokenOfType(token, type)
 	return getmetatable(token) == type
+end
+
+---@class Tokens.EoF : Tokens.Base
+Tokens.EoF = {}
+Tokens.EoF.__index = Tokens.EoF
+
+function Tokens.EoF:__tostring()
+	return "EoF"
+end
+
+---@return Tokens.EoF
+function Tokens.EoF.new()
+	return setmetatable({line = -1, col = -1}, Tokens.EoF)
 end
 
 --#region Syntax Elements
@@ -75,7 +88,7 @@ Tokens.Literal = {}
 Tokens.Literal.__index = Tokens.Literal
 
 function Tokens.Literal:__tostring()
-	return string.format("Literal<%s>", tostring(self.value))
+	return "literal"
 end
 
 ---@param line integer
@@ -95,7 +108,7 @@ Tokens.Symbol = {}
 Tokens.Symbol.__index = Tokens.Symbol
 
 function Tokens.Symbol:__tostring()
-	return string.format("Symbol<%s>", self.value)
+	return "symbol"
 end
 
 ---@param line integer
@@ -117,7 +130,7 @@ Tokens.Keyword.__index = Tokens.Keyword
 function Tokens.Keyword:__tostring()
 	for name, val in pairs(MLang.KEYWORD) do
 		if val == self.value then
-			return string.format("Keyword<%s>", name)
+			return name
 		end
 	end
 	error("Invalid keyword in token")
@@ -140,7 +153,7 @@ Tokens.Operator = {}
 Tokens.Operator.__index = Tokens.Operator
 
 function Tokens.Operator:__tostring()
-	return string.format("Operator<%s>", self.value)
+	return self.value
 end
 
 ---@param line integer
@@ -160,7 +173,7 @@ Tokens.Assignment = {}
 Tokens.Assignment.__index = Tokens.Assignment
 
 function Tokens.Assignment:__tostring()
-	return string.format("Assignment<%s>", self.value or "no op")
+	return self.value and self.value .. "=" or "="
 end
 
 ---@param line integer
@@ -180,7 +193,7 @@ Tokens.Semicolon = {}
 Tokens.Semicolon.__index = Tokens.Semicolon
 
 function Tokens.Semicolon:__tostring()
-	return "Control<;>"
+	return ";"
 end
 
 ---@param line integer
@@ -195,7 +208,7 @@ Tokens.Colon = {}
 Tokens.Colon.__index = Tokens.Colon
 
 function Tokens.Colon:__tostring()
-	return "Control<:>"
+	return ":"
 end
 
 ---@param line integer
@@ -210,7 +223,7 @@ Tokens.Comma = {}
 Tokens.Comma.__index = Tokens.Comma
 
 function Tokens.Comma:__tostring()
-	return "Control<,>"
+	return ","
 end
 
 ---@param line integer
@@ -225,7 +238,7 @@ Tokens.FullStop = {}
 Tokens.FullStop.__index = Tokens.FullStop
 
 function Tokens.FullStop:__tostring()
-	return "Control<.>"
+	return "."
 end
 
 ---@param line integer
@@ -240,7 +253,7 @@ Tokens.OpenBracket = {}
 Tokens.OpenBracket.__index = Tokens.OpenBracket
 
 function Tokens.OpenBracket:__tostring()
-	return "Control<(>"
+	return "("
 end
 
 ---@param line integer
@@ -255,7 +268,7 @@ Tokens.ClosedBracket = {}
 Tokens.ClosedBracket.__index = Tokens.ClosedBracket
 
 function Tokens.ClosedBracket:__tostring()
-	return "Control<)>"
+	return ")"
 end
 
 ---@param line integer
@@ -270,7 +283,7 @@ Tokens.OpenCurly = {}
 Tokens.OpenCurly.__index = Tokens.OpenCurly
 
 function Tokens.OpenCurly:__tostring()
-	return "Control<{>"
+	return "{"
 end
 
 ---@param line integer
@@ -285,7 +298,7 @@ Tokens.ClosedCurly = {}
 Tokens.ClosedCurly.__index = Tokens.ClosedCurly
 
 function Tokens.ClosedCurly:__tostring()
-	return "Control<}>"
+	return "}"
 end
 
 ---@param line integer
@@ -300,7 +313,7 @@ Tokens.OpenSquare = {}
 Tokens.OpenSquare.__index = Tokens.OpenSquare
 
 function Tokens.OpenSquare:__tostring()
-	return "Control<[>"
+	return "["
 end
 
 ---@param line integer
@@ -315,7 +328,7 @@ Tokens.ClosedSquare = {}
 Tokens.ClosedSquare.__index = Tokens.ClosedSquare
 
 function Tokens.ClosedSquare:__tostring()
-	return "Control<]>"
+	return "]"
 end
 
 ---@param line integer
@@ -330,7 +343,7 @@ Tokens.OpenAngle = {}
 Tokens.OpenAngle.__index = Tokens.OpenAngle
 
 function Tokens.OpenAngle:__tostring()
-	return "Control<<>"
+	return "<"
 end
 
 ---@param line integer
@@ -345,7 +358,7 @@ Tokens.ClosedAngle = {}
 Tokens.ClosedAngle.__index = Tokens.ClosedAngle
 
 function Tokens.ClosedAngle:__tostring()
-	return "Control<>>"
+	return ">"
 end
 
 ---@param line integer

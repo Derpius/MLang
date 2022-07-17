@@ -1,7 +1,10 @@
-local Objects, Keyword = MLang.Objects, MLang.Keyword
+local Tokens = MLang.Tokens
+local IsTokenOfType = MLang.IsTokenOfType
+local KEYWORD = MLang.KEYWORD
+local Objects = MLang.Objects
 
 ---@param ctx Context
----@param tokens table<integer, Token>
+---@param tokens table<integer, Tokens.Base>
 ---@return table<integer, BaseObject>
 local function parse(ctx, tokens)
 	local tree = {}
@@ -11,46 +14,49 @@ local function parse(ctx, tokens)
 	local isInRealm = false
 
 	--- Returns the next token if it's of the specified category (doesn't advance the token pointer)
-	---@param category string
+	---@generic Token : Tokens.Base
+	---@param category Token
 	---@return Token?
 	local function peekTok(category)
 		if (
 			tokPtr <= numToks and
-			tokens[tokPtr].category == category
+			IsTokenOfType(tokens[tokPtr], category)
 		) then
 			return tokens[tokPtr]
 		end
 	end
 
 	--- Gets the next token in sequence and advances the pointer without performing any checks
-	---@return Token
+	---@return Tokens.Base
 	local function getTok()
 		tokPtr = tokPtr + 1
-		return tokens[tokPtr - 1] or MLang.Token("eof", nil, -1, -1)
+		return tokens[tokPtr - 1] or Tokens.EoF.new()
 	end
 
 	--- Gets the next token and returns whether the token was of the type specified  
 	--- Only advances the token pointer if the next token is of the type specified
-	---@param category string
+	---@generic Token : Tokens.Base
+	---@param category Token
 	---@return boolean
-	---@return Token
+	---@return Token|Tokens.Base
 	local function acceptTok(category)
 		if peekTok(category) then
 			return true, getTok()
 		else
-			return false, tokens[tokPtr] or MLang.Token("eof", nil, -1, -1)
+			return false, tokens[tokPtr] or Tokens.EoF.new()
 		end
 	end
 
 	--- Gets the next token if it's of the specified category, errors if not
-	---@param category string
+	---@generic Token : Tokens.Base
+	---@param category Token
 	---@param msg? string Custom error message to use
 	---@return Token
 	local function requireTok(category, msg)
 		local found, tok = acceptTok(category)
 		if not found then
 			ctx:Throw(
-				msg or ("Expected '%s', got '%s'"):format(category, tok.category),
+				msg or ("Expected '%s', got '%s'"):format(category, tok),
 				tok.line, tok.col
 			)
 		end
@@ -61,7 +67,7 @@ local function parse(ctx, tokens)
 	---@param requireFunction? boolean
 	---@return Type[]
 	local function parseTemplateArguments(requireFunction)
-		if not peekTok("<") then return {} end
+		if not peekTok(Tokens.OpenAngle) then return {} end
 
 		if requireFunction then
 			local nest, ptr = 1, tokPtr + 1
@@ -70,45 +76,45 @@ local function parse(ctx, tokens)
 					return {}
 				end
 				
-				if tokens[ptr].category == "<" then
+				if IsTokenOfType(tokens[ptr], Tokens.OpenAngle) then
 					nest = nest + 1
-				elseif tokens[ptr].category == ">" then
+				elseif IsTokenOfType(tokens[ptr], Tokens.ClosedAngle) then
 					nest = nest - 1
 				end
 
 				ptr = ptr + 1
 			end
-			if tokens[ptr].category ~= "(" then return {} end
+			if not IsTokenOfType(tokens[ptr], Tokens.OpenBracket) then return {} end
 		end
 		
 		getTok() -- consume opening angle bracket
 
 		local args, numArgs = {}, 0
 		repeat
-			local typeName = requireTok("symbol", "Type name expected")
+			local typeName = requireTok(Tokens.Symbol, "Type name expected")
 			local type = Objects.Type(typeName.line, typeName.col, typeName.value, parseTemplateArguments())
 
 			numArgs = numArgs + 1
 			args[numArgs] = type
-		until not acceptTok(",")
+		until not acceptTok(Tokens.Comma)
 
-		requireTok(">")
+		requireTok(Tokens.ClosedAngle)
 		return args
 	end
 
 	--- Parses template parameters used when declaring a class or function (`template<TypeName,...>`)
 	---@return string[]
 	local function parseTemplateParams()
-		if not acceptTok("<") then return {} end
+		if not acceptTok(Tokens.OpenAngle) then return {} end
 
 		local template, i = {}, 1
 		repeat
-			local symbol = requireTok("symbol", "Expected type name in template parameters")
+			local symbol = requireTok(Tokens.Symbol, "Expected type name in template parameters")
 			template[i] = symbol.value
 			i = i + 1
-		until not acceptTok(",")
+		until not acceptTok(Tokens.Comma)
 
-		requireTok(">")
+		requireTok(Tokens.ClosedAngle)
 		return template
 	end
 
@@ -132,7 +138,7 @@ local function parse(ctx, tokens)
 	--- Parses a complete type
 	---@return Type
 	local function parseType()
-		local typeName = requireTok("symbol", "Type name expected")
+		local typeName = requireTok(Tokens.Symbol, "Type name expected")
 		return MLang.Objects.Type(typeName.line, typeName.col, typeName.value, parseTemplateArguments())
 	end
 
@@ -141,29 +147,29 @@ local function parse(ctx, tokens)
 	---@return Variable
 	local function parseVariable(ignoreSemicolon)
 		local constant = false
-		local cmdPresent, cmd = acceptTok("keyword")
+		local cmdPresent, cmd = acceptTok(Tokens.Keyword)
 		if cmdPresent then
-			if cmd.value ~= Keyword.Const then
+			if cmd.value ~= KEYWORD.const then
 				ctx:Throw("Expected const or type name", cmd.line, cmd.col)
 			end
 			constant = true
 		end
 
-		local type, name = parseType(), requireTok("symbol", "Variable name expected")
+		local type, name = parseType(), requireTok(Tokens.Symbol, "Variable name expected")
 		local var = Objects.Variable(
 			name.line, name.col,
 			constant, type, name.value
 		)
 
 		local templateParams = parseTemplateParams()
-		if peekTok("(") then
+		if peekTok(Tokens.OpenBracket) then
 			var = Objects.Function(
 				name.line, name.col,
 				constant, type, name.value,
 				parseParams(), templateParams
 			)
 
-			if peekTok("{") then
+			if peekTok(Tokens.OpenCurly) then
 				funcDepth = funcDepth + 1
 				var.value = parseBlock()
 				funcDepth = funcDepth - 1
@@ -173,7 +179,7 @@ local function parse(ctx, tokens)
 			ctx:Throw("Template parameters can only be used with functions and type names", name.line, name.col)
 		end
 
-		local isAssignment, tok = acceptTok("assignment")
+		local isAssignment, tok = acceptTok(Tokens.Assignment)
 		if isAssignment then
 			if not tok.value then
 				var.value = parseExpression()
@@ -183,22 +189,22 @@ local function parse(ctx, tokens)
 		end
 
 		if not ignoreSemicolon then
-			requireTok(";")
+			requireTok(Tokens.Semicolon)
 		end
 		return var
 	end
 
 	function parseParams()
-		requireTok("(")
+		requireTok(Tokens.OpenBracket)
 		local params, numParams = {}, 0
-		if acceptTok(")") then return {} end
+		if acceptTok(Tokens.ClosedBracket) then return {} end
 
 		repeat
 			numParams = numParams + 1
 			params[numParams] = parseVariable(true)
-		until not acceptTok(",")
+		until not acceptTok(Tokens.Comma)
 
-		requireTok(")")
+		requireTok(Tokens.ClosedBracket)
 		return params
 	end
 
@@ -206,25 +212,25 @@ local function parse(ctx, tokens)
 	--- Not to be confused with parameters defined inside `()`
 	---@return BaseObject[]
 	local function parseArgs()
-		requireTok("(")
+		requireTok(Tokens.OpenBracket)
 		local args, numArgs = {}, 0
-		if acceptTok(")") then return {} end
+		if acceptTok(Tokens.ClosedBracket) then return {} end
 	
 		repeat
 			numArgs = numArgs + 1
 			args[numArgs] = parseExpression()
-		until not acceptTok(",")
+		until not acceptTok(Tokens.Comma)
 
-		requireTok(")")
+		requireTok(Tokens.ClosedBracket)
 		return args
 	end
 
 	---Parses a condition inside `()`
 	---@return BaseObject
 	local function parseCondition()
-		local tok = requireTok("(")
+		local tok = requireTok(Tokens.OpenBracket)
 		local cond = parseExpression()
-		requireTok(")")
+		requireTok(Tokens.ClosedBracket)
 		return cond
 	end
 
@@ -232,12 +238,12 @@ local function parse(ctx, tokens)
 	---@param base? BaseObject
 	---@return Get|Call|Index
 	local function parseLookup(base)
-		local symbol = requireTok("symbol", "Expected variable or namespace name")
+		local symbol = requireTok(Tokens.Symbol, "Expected variable or namespace name")
 		local ret
 
 		local templateArgs = parseTemplateArguments(true)
 
-		if peekTok("(") then --- Function call
+		if peekTok(Tokens.OpenBracket) then --- Function call
 			ret = MLang.Objects.Call(
 				symbol.line, symbol.col,
 				symbol.value,
@@ -247,20 +253,18 @@ local function parse(ctx, tokens)
 			ret = MLang.Objects.Get(symbol.line, symbol.col, symbol.value)
 		end
 
-		local indexing, openBracket = acceptTok("[")
+		local indexing, openBracket = acceptTok(Tokens.OpenSquare)
 		if indexing then
 			ret = MLang.Objects.Index(
 				openBracket.line, openBracket.col,
 				ret, parseExpression()
 			)
 
-			if not acceptTok("]") then
-				ctx:Throw("Missing closing bracket", openBracket.line, openBracket.col)
-			end
+			requireTok(Tokens.ClosedSquare, "Missing closing bracket")
 		end
 
 		ret.base = base
-		if acceptTok(".") then
+		if acceptTok(Tokens.FullStop) then
 			return parseLookup(ret)
 		end
 
@@ -271,7 +275,7 @@ local function parse(ctx, tokens)
 	---@param getter Get|Index Base object to assign to
 	---@return Set
 	local function parseSet(getter)
-		local assignmentTok = requireTok("assignment", "Expected variable assignment")
+		local assignmentTok = requireTok(Tokens.Assignment, "Expected variable assignment")
 		if assignmentTok.value then
 			local setter = Objects.Set(
 				assignmentTok.line, assignmentTok.col, getter.symbol,
@@ -294,22 +298,29 @@ local function parse(ctx, tokens)
 
 	function parseExpression()
 		--- Parses an operator
-		---@return Token? operator
-		---@return integer offset Amount to increment tokPtr by after peeking
+		---@return Tokens.Operator? operator
+		---@return integer? offset Amount to increment tokPtr by after peeking
 		local function parseOperator()
-			local opTok = peekTok("operator")
+			local opTok = peekTok(Tokens.Operator)
 			if opTok then
 				return opTok, 1
 			end
 
-			if peekTok("<") or peekTok(">") then
-				local angleBracket = tokens[tokPtr]
-				local op = angleBracket.category
-				
-				if tokens[tokPtr + 1] and tokens[tokPtr + 1].category == op then
-					return MLang.Token("operator", op .. op, angleBracket.line, angleBracket.col), 2
+			local op, type
+			local opTok = tokens[tokPtr]
+			if peekTok(Tokens.OpenAngle) then
+				op = "<"
+				type = Tokens.OpenAngle
+			elseif peekTok(Tokens.ClosedAngle) then
+				op = ">"
+				type = Tokens.ClosedAngle
+			end
+
+			if op then
+				if peekTok(type) then
+					return Tokens.Operator.new(opTok.line, opTok.col, op .. op), 2
 				end
-				return MLang.Token("operator", op, angleBracket.line, angleBracket.col), 1
+				return Tokens.Operator(opTok.line, opTok.col, op), 1
 			end
 		end
 
@@ -326,21 +337,24 @@ local function parse(ctx, tokens)
 			end
 			if op then tokPtr = tokPtr + offset end
 
-			if acceptTok("(") then
+			if acceptTok(Tokens.OpenBracket) then
 				ret = parseSubExp(0)
-				requireTok(")", "Missing closing bracket")
+				requireTok(Tokens.ClosedBracket, "Missing closing bracket")
 
-				if acceptTok(".") then
+				if acceptTok(Tokens.FullStop) then
 					ret = parseLookup(ret)
 				end
-			elseif peekTok("literal") then
+			elseif peekTok(Tokens.Literal) then
 				local literal = getTok()
+
+				-- Lua typing doesn't know that getTok will always return a literal here due to the peekTok call and thinks there's no value field
+				---@diagnostic disable-next-line: undefined-field
 				ret = MLang.Objects.Literal(literal.line, literal.col, literal.value)
-			elseif peekTok("symbol") then
+			elseif peekTok(Tokens.Symbol) then
 				ret = parseLookup()
 			else
 				local tok = getTok()
-				if tok.category == "eof" then
+				if IsTokenOfType(tok, Tokens.EoF) then
 					ctx:Throw("Expression ran off the end of the program", tok.line, tok.col)
 				else
 					ctx:Throw("Invalid operand", tok.line, tok.col)
@@ -390,20 +404,21 @@ local function parse(ctx, tokens)
 	--- Parse a class definition/declaration
 	---@return Class
 	local function parseClass()
-		local name = requireTok("symbol", "Expected class name")
+		local name = requireTok(Tokens.Symbol, "Expected class name")
 		local template = parseTemplateParams()
 		local class = Objects.Class(name.line, name.col, name.value, template)
 
 		local numConstructors = 0
 
-		if acceptTok(":") then
+		if acceptTok(Tokens.Colon) then
 			class.extends = parseType()
 		end
 
-		requireTok("{")
-		while not acceptTok("}") do
-			if peekTok("symbol") and peekTok("symbol").value == name.value then -- Constructors
-				local symbol = getTok()
+		requireTok(Tokens.OpenCurly)
+		while not acceptTok(Tokens.ClosedCurly) do
+			local symbol = peekTok(Tokens.Symbol)
+			if symbol and symbol.value == name.value then -- Constructors
+				getTok()
 
 				local constructor = Objects.Function(
 					symbol.line, symbol.col,
@@ -418,15 +433,15 @@ local function parse(ctx, tokens)
 				numConstructors = numConstructors + 1
 				class.constructors[numConstructors] = constructor
 			else
-				local keyword = requireTok("keyword", "Expected public/private/operator keyword or a constructor")
-				if keyword.value == Keyword.Operator then
+				local keyword = requireTok(Tokens.Keyword, "Expected public/private/operator keyword or a constructor")
+				if keyword.value == KEYWORD.operator then
 					-- TODO: Operator parsing
 				else
-					if not MLang.Utils.MakeLUT({Keyword.Private, Keyword.Public})[keyword.value] then
-						ctx:Throw("Expected public/private/operator or a constructor", keyword.line, keyword.col)
+					if not MLang.Utils.MakeLUT({KEYWORD.private, KEYWORD.public})[keyword.value] then
+						ctx:Throw("Expected public/private/operator keyword or a constructor", keyword.line, keyword.col)
 					end
 
-					local public = keyword.value == Keyword.Public
+					local public = keyword.value == KEYWORD.public
 					local var = parseVariable()
 
 					if class.publics[var.symbol] or class.privates[var.symbol] then
@@ -448,7 +463,7 @@ local function parse(ctx, tokens)
 	--- Parses a line of code
 	---@return BaseObject
 	local function parseLine()
-		if peekTok("symbol") then
+		if peekTok(Tokens.Symbol) then
 			--[[
 				A line starting with a symbol can either be variable declaration/definition, or a function call
 				<symbol><template?><symbol> Declaration, where the first symbol is the type
@@ -460,7 +475,7 @@ local function parse(ctx, tokens)
 			getTok()
 			parseTemplateArguments()
 
-			if peekTok("symbol") then -- Must be a declaration, anything else would have an opening bracket or assignment/.
+			if peekTok(Tokens.Symbol) then -- Must be a declaration, anything else would have an opening bracket or assignment.
 				tokPtr = oldPtr
 				return parseVariable()
 			else
@@ -471,22 +486,22 @@ local function parse(ctx, tokens)
 					ret = parseSet(ret)
 				end
 
-				requireTok(";")
+				requireTok(Tokens.Semicolon)
 				return ret
 			end
-		elseif peekTok("keyword") then
-			local keyword = getTok()
+		elseif peekTok(Tokens.Keyword) then
+			local _, keyword = acceptTok(Tokens.Keyword)
 
-			if keyword.value == Keyword.Const then
+			if keyword.value == KEYWORD.const then
 				tokPtr = tokPtr - 1 -- parseVariable needs to get the const token itself
 				return parseVariable()
-			elseif keyword.value == Keyword.If then
+			elseif keyword.value == KEYWORD["if"] then
 				local ret = Objects.If(keyword.line, keyword.col, parseCondition(), parseBlock())
 
 				local deepestNode = ret
-				while peekTok("keyword") and peekTok("keyword").value == Keyword.Else do
+				while peekTok(Tokens.Keyword) and peekTok(Tokens.Keyword).value == KEYWORD["else"] do
 					local elseTok = getTok()
-					if not peekTok("keyword") or peekTok("keyword").value ~= Keyword.If then
+					if not peekTok(Tokens.Keyword) or peekTok(Tokens.Keyword).value ~= KEYWORD["if"] then
 						deepestNode.otherwise = parseBlock()
 						return ret
 					end
@@ -497,42 +512,42 @@ local function parse(ctx, tokens)
 				end
 
 				return ret
-			elseif keyword.value == Keyword.While then
+			elseif keyword.value == KEYWORD["while"] then
 				loopDepth = loopDepth + 1
 				local ret = Objects.While(keyword.line, keyword.col, parseCondition(), parseBlock(), false)
 				loopDepth = loopDepth - 1
 
 				return ret
-			elseif keyword.value == Keyword.Do then
+			elseif keyword.value == KEYWORD["do"] then
 				loopDepth = loopDepth + 1
 				local block = parseBlock()
 				loopDepth = loopDepth - 1
 
-				local whileKeyword = requireTok("keyword", "Expected while after do block")
-				if whileKeyword.value ~= Keyword.While then
+				local whileKeyword = requireTok(Tokens.Keyword, "Expected while after do block")
+				if whileKeyword.value ~= KEYWORD.While then
 					ctx:Throw("Expected while after do block", whileKeyword.line, whileKeyword.col)
 				end
 
 				local ret = Objects.While(keyword.line, keyword.col, parseCondition(), block, true)
-				requireTok(";")
+				requireTok(Tokens.Semicolon)
 				return ret
-			elseif keyword.value == Keyword.For then
-				requireTok("(")
+			elseif keyword.value == KEYWORD["for"] then
+				requireTok(Tokens.OpenBracket)
 
 				local iterator
-				if not peekTok(";") then -- allow skipping the definition of a loop variable
+				if not peekTok(Tokens.Semicolon) then -- allow skipping the definition of a loop variable
 					iterator = parseVariable()
 				end
-				requireTok(";")
+				requireTok(Tokens.Semicolon)
 
 				local condition
-				if not peekTok(";") then
+				if not peekTok(Tokens.Semicolon) then
 					condition = parseExpression()
 				end
-				requireTok(";")
+				requireTok(Tokens.Semicolon)
 
 				local incrementor
-				if not peekTok(")") then
+				if not peekTok(Tokens.ClosedBracket) then
 					local symbol = parseLookup()
 					if MLang.IsObjectOfType(symbol, Objects.Call) then
 						ctx:Throw("Expected variable assignment", symbol.line, symbol.col)
@@ -540,65 +555,67 @@ local function parse(ctx, tokens)
 					incrementor = parseSet(symbol)
 				end
 
-				requireTok(")")
+				requireTok(Tokens.ClosedBracket)
 
 				loopDepth = loopDepth + 1
 				local block = parseBlock()
 				loopDepth = loopDepth - 1
 
 				return Objects.For(keyword.line, keyword.col, iterator, condition, incrementor, block)
-			elseif keyword.value == Keyword.Foreach then
+			elseif keyword.value == KEYWORD.foreach then
 				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Return then
+			elseif keyword.value == KEYWORD["return"] then
 				if funcDepth < 1 then
 					ctx:Throw("Return can only be used inside a function", keyword.line, keyword.col)
 				end
 
 				local ret = Objects.Return(
 					keyword.line, keyword.col,
-					peekTok(";") and MLang.Objects.Literal(keyword.line, keyword.col) or parseExpression()
+					peekTok(Tokens.Semicolon) and MLang.Objects.Literal(keyword.line, keyword.col) or parseExpression()
 				)
-				requireTok(";")
+				requireTok(Tokens.Semicolon)
 				return ret
-			elseif keyword.value == Keyword.Break or keyword.value == Keyword.Continue then
+			elseif keyword.value == KEYWORD["break"] or keyword.value == KEYWORD["continue"] then
 				if loopDepth < 1 then
 					ctx:Throw("Break and continue can only be used inside a loop", keyword.line, keyword.col)
 				end
 
-				local ret = Objects.LoopControl(keyword.line, keyword.col, keyword.value == Keyword.Break)
-				requireTok(";")
+				local ret = Objects.LoopControl(keyword.line, keyword.col, keyword.value == KEYWORD["break"])
+				requireTok(Tokens.Semicolon)
 				return ret
-			elseif keyword.value == Keyword.Class then
+			elseif keyword.value == KEYWORD.class then
 				return parseClass()
-			elseif keyword.value == Keyword.Namespace then
+			elseif keyword.value == KEYWORD.namespace then
 				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Try then
+			elseif keyword.value == KEYWORD.try then
 				ctx:Throw("Not implemented yet", -1, -1)
-			elseif keyword.value == Keyword.Server or keyword.value == Keyword.Client then
+			elseif keyword.value == KEYWORD.server or keyword.value == KEYWORD.client then
 				if isInRealm then
 					ctx:Throw("Can't nest a realm block inside another realm block", keyword.line, keyword.col)
 				end
 
 				isInRealm = true
-				local ret = Objects.Realm(keyword.line, keyword.col, keyword.value == Keyword.Server, parseBlock())
+				local ret = Objects.Realm(keyword.line, keyword.col, keyword.value == KEYWORD.Server, parseBlock())
 				isInRealm = false
 
 				return ret
 			else
-				ctx:Throw("Invalid keyword to start line", keyword.line, keyword.col)
+				ctx:Throw("Invalid keyword '" .. tostring(keyword) .. "' to start line", keyword.line, keyword.col)
 			end
 		else
 			local tok = getTok()
-			ctx:Throw("Unexpected '" .. tok.category .. "' to start line", tok.line, tok.col)
+			ctx:Throw("Unexpected '" .. tostring(tok) .. "' to start line", tok.line, tok.col)
 		end
+
+		error("Fell through parseLine without triggering an error")
 	end
 
 	function parseBlock()
-		local openBracket = requireTok("{")
+		local openBracket = requireTok(Tokens.OpenCurly)
 
 		local block, blockLen = {}, 0
-		while not acceptTok("}") do
-			if peekTok("eof") then
+		while not acceptTok(Tokens.ClosedCurly) do
+			if peekTok(Tokens.EoF) then
 				ctx:Throw("Missing closing bracket", openBracket.line, openBracket.col)
 			end
 
@@ -618,7 +635,7 @@ end
 
 --- Parses MLang tokens into an abstract syntax tree
 ---@param ctx Context
----@param tokens table<integer, Token>
+---@param tokens table<integer, Tokens.Base>
 ---@return table<integer, BaseObject>?
 function MLang.Parse(ctx, tokens)
 	--[[local ret

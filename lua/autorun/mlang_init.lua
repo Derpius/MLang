@@ -45,7 +45,6 @@ for i, tok in ipairs(toks) do
 	print(tostring(tok))
 end
 
---[[
 print("\nPARSING")
 local ast = MLang.Parse(context, toks)
 
@@ -57,6 +56,7 @@ end
 
 PrintTable(ast) -- TODO: better AST printing
 
+--[[
 print("\nTRANSPILING")
 
 local lua = MLang.Transpile(context, ast)

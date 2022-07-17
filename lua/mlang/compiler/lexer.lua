@@ -11,29 +11,6 @@ local MakeLUT, MakeStringLUT = MLang.Utils.MakeLUT, MLang.Utils.MakeStringLUT
 local KEYWORD = MLang.KEYWORD
 local Tokens = MLang.Tokens
 
----@type table<string, Keyword>
-local KEYWORDS = {
-	["const"] = KEYWORD.Const,
-	["if"] = KEYWORD.If,
-	["else"] = KEYWORD.Else,
-	["while"] = KEYWORD.While,
-	["do"] = KEYWORD.Do,
-	["for"] = KEYWORD.For,
-	["foreach"] = KEYWORD.Foreach,
-	["return"] = KEYWORD.Return,
-	["break"] = KEYWORD.Break,
-	["continue"] = KEYWORD.Continue,
-	["class"] = KEYWORD.Class,
-	["private"] = KEYWORD.Private,
-	["public"] = KEYWORD.Public,
-	["operator"] = KEYWORD.Operator,
-	["namespace"] = KEYWORD.Namespace,
-	["try"] = KEYWORD.Try,
-	["catch"] = KEYWORD.Catch,
-	["server"] = KEYWORD.Server,
-	["client"] = KEYWORD.Client
-}
-
 local ESCAPE_CHARS = {
 	b = "\\b", -- The string literal escape sequences are stored unescaped as they'll be emitted to raw lua
 	f = "\\f",
@@ -192,8 +169,8 @@ local function lex(ctx, code)
 					symbol = symbol .. nextChar()
 				end
 
-				if KEYWORDS[symbol] then
-					appendTok(Tokens.Keyword, KEYWORDS[symbol])
+				if KEYWORD[symbol] then
+					appendTok(Tokens.Keyword, KEYWORD[symbol])
 				elseif symbol == "true" or symbol == "false" then
 					appendTok(Tokens.Literal, symbol == "true")
 				elseif symbol == "null" then
