@@ -4,10 +4,13 @@ include("mlang/utils.lua")
 
 include("mlang/context.lua")
 
-include("mlang/compiler/objects.lua")
 include("mlang/compiler/operators.lua")
+include("mlang/compiler/tokens.lua")
 include("mlang/compiler/lexer.lua")
+
+include("mlang/compiler/objects.lua")
 include("mlang/compiler/parser.lua")
+
 include("mlang/compiler/transpiler.lua")
 
 -- DEBUG CODE
@@ -42,6 +45,7 @@ for i, tok in ipairs(toks) do
 	print(tostring(tok))
 end
 
+--[[
 print("\nPARSING")
 local ast = MLang.Parse(context, toks)
 
@@ -64,3 +68,4 @@ elseif not lua then
 end
 
 --print(lua)
+]]

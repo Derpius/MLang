@@ -1,27 +1,3 @@
----@class Token
----@field category string
----@field value? string|number|boolean
----@field line integer
----@field col integer
-local token = {}
-token.__index = token
-
---- Creates a new Token
----@param category string
----@param value? string|number|boolean
----@param line integer
----@param col integer
----@return Token
-local function Token(category, value, line, col)
-	return setmetatable({category = category, value = value, line = line, col = col}, token)
-end
-
-function token:__tostring()
-	return string.format("Token<%s> [%i, %i] = %s", self.category, self.line, self.col, tostring(self.value))
-end
-
-MLang.Token = Token
-
 --- Gets a character from a string at the specified index
 ---@param str string
 ---@param idx integer
@@ -32,51 +8,30 @@ end
 
 local MakeLUT, MakeStringLUT = MLang.Utils.MakeLUT, MLang.Utils.MakeStringLUT
 
---- Enum of all MLang keywords
----@type table<string, integer>
-local Keyword = {
-	Const = 0,
-	If = 1,
-	Else = 2,
-	While = 3,
-	Do = 4,
-	For = 5,
-	Foreach = 6,
-	Return = 7,
-	Break = 8,
-	Continue = 9,
-	Class = 10,
-	Private = 11,
-	Public = 12,
-	Operator = 13,
-	Namespace = 14,
-	Try = 15,
-	Catch = 16,
-	Server = 17,
-	Client = 18
-}
-MLang.Keyword = Keyword
+local KEYWORD = MLang.KEYWORD
+local Tokens = MLang.Tokens
 
+---@type table<string, Keyword>
 local KEYWORDS = {
-	["const"] = Keyword.Const,
-	["if"] = Keyword.If,
-	["else"] = Keyword.Else,
-	["while"] = Keyword.While,
-	["do"] = Keyword.Do,
-	["for"] = Keyword.For,
-	["foreach"] = Keyword.Foreach,
-	["return"] = Keyword.Return,
-	["break"] = Keyword.Break,
-	["continue"] = Keyword.Continue,
-	["class"] = Keyword.Class,
-	["private"] = Keyword.Private,
-	["public"] = Keyword.Public,
-	["operator"] = Keyword.Operator,
-	["namespace"] = Keyword.Namespace,
-	["try"] = Keyword.Try,
-	["catch"] = Keyword.Catch,
-	["server"] = Keyword.Server,
-	["client"] = Keyword.Client
+	["const"] = KEYWORD.Const,
+	["if"] = KEYWORD.If,
+	["else"] = KEYWORD.Else,
+	["while"] = KEYWORD.While,
+	["do"] = KEYWORD.Do,
+	["for"] = KEYWORD.For,
+	["foreach"] = KEYWORD.Foreach,
+	["return"] = KEYWORD.Return,
+	["break"] = KEYWORD.Break,
+	["continue"] = KEYWORD.Continue,
+	["class"] = KEYWORD.Class,
+	["private"] = KEYWORD.Private,
+	["public"] = KEYWORD.Public,
+	["operator"] = KEYWORD.Operator,
+	["namespace"] = KEYWORD.Namespace,
+	["try"] = KEYWORD.Try,
+	["catch"] = KEYWORD.Catch,
+	["server"] = KEYWORD.Server,
+	["client"] = KEYWORD.Client
 }
 
 local ESCAPE_CHARS = {
@@ -91,7 +46,20 @@ local ESCAPE_CHARS = {
 }
 
 local WHITESPACE = MakeStringLUT(" \t\r")
-local CONTROL = MakeStringLUT("(){}[],;.:<>")
+local CONTROL = {
+	[";"] = Tokens.Semicolon,
+	[":"] = Tokens.Colon,
+	[","] = Tokens.Comma,
+	["."] = Tokens.FullStop,
+	["("] = Tokens.OpenBracket,
+	[")"] = Tokens.ClosedBracket,
+	["{"] = Tokens.OpenCurly,
+	["}"] = Tokens.ClosedCurly,
+	["["] = Tokens.OpenSquare,
+	["]"] = Tokens.ClosedSquare,
+	["<"] = Tokens.OpenAngle,
+	[">"] = Tokens.ClosedAngle
+}
 local STRING = MakeStringLUT("'\"")
 local NUMBER = MakeStringLUT("0123456789.")
 
@@ -103,7 +71,7 @@ local ASSIGNMENT_OPS = MakeLUT({"|", "&", "+", "-", "*", "/", "//", "%"})
 
 ---@param ctx Context
 ---@param code string
----@return table<integer, Token>
+---@return table<integer, Tokens.Base>
 local function lex(ctx, code)
 	local tokens, numTokens, tokenStartCol = {}, 0, 0
 	local line, col = 1, 0
@@ -111,11 +79,11 @@ local function lex(ctx, code)
 	local charPtr = 1
 
 	--- Helper to append a token to the table
-	---@param category string
+	---@param type Tokens.Base
 	---@param value? string|number|boolean
-	local function appendTok(category, value)
+	local function appendTok(type, value)
 		numTokens = numTokens + 1
-		tokens[numTokens] = Token(category, value, line, tokenStartCol)
+		tokens[numTokens] = type.new(line, tokenStartCol, value)
 	end
 
 	--- Get the next char in sequence and advance the pointer
@@ -149,13 +117,13 @@ local function lex(ctx, code)
 
 				if ASSIGNMENT_OPS[op] and getChar(code, charPtr) == "=" then
 					nextChar()
-					appendTok("assignment", op)
+					appendTok(Tokens.Assignment, op)
 				elseif op == "=" then
-					appendTok("assignment")
+					appendTok(Tokens.Assignment)
 				elseif op == "-" and getChar(code, charPtr):match("[%(_%w]") and (charPtr - 2 <= 0 or not getChar(code, charPtr - 2):match("[%)_%w]")) then
-					appendTok("operator", "#") -- Special unary negative operator
+					appendTok(Tokens.Operator, "#") -- Special unary negative operator
 				elseif MLang.OPERATORS[op] then
-					appendTok("operator", op)
+					appendTok(Tokens.Operator, op)
 				else
 					ctx:Throw("Invalid operator '" .. op .. "'", line, tokenStartCol)
 				end
@@ -164,15 +132,15 @@ local function lex(ctx, code)
 					if code[charPtr] == char and code[charPtr + 1] == "=" then
 						charPtr = charPtr + 2
 						col = col + 2
-						appendTok("assignment", char .. char .. "=")
+						appendTok(Tokens.Assignment, char .. char .. "=")
 					elseif code[charPtr] == "=" then
 						nextChar()
-						appendTok("operator", char .. "=")
+						appendTok(Tokens.Operator, char .. "=")
 					else
-						appendTok(char)
+						appendTok(CONTROL[char])
 					end
 				else
-					appendTok(char)
+					appendTok(CONTROL[char])
 				end
 			elseif STRING[char] then -- Strings
 				local str, delim = "", char
@@ -202,7 +170,7 @@ local function lex(ctx, code)
 					end
 				end
 
-				appendTok("literal", str)
+				appendTok(Tokens.Literal, str)
 			elseif NUMBER[char] then -- Numbers
 				local numString, decimalPlaceCount = char, char == "." and 1 or 0
 
@@ -216,7 +184,7 @@ local function lex(ctx, code)
 
 					numString = numString .. char
 				end
-				appendTok("literal", tonumber(numString))
+				appendTok(Tokens.Literal, tonumber(numString))
 			elseif char:match("[_%a]") then -- Symbols
 				local symbol = char
 
@@ -225,13 +193,13 @@ local function lex(ctx, code)
 				end
 
 				if KEYWORDS[symbol] then
-					appendTok("keyword", KEYWORDS[symbol])
+					appendTok(Tokens.Keyword, KEYWORDS[symbol])
 				elseif symbol == "true" or symbol == "false" then
-					appendTok("literal", symbol == "true")
+					appendTok(Tokens.Literal, symbol == "true")
 				elseif symbol == "null" then
-					appendTok("literal")
+					appendTok(Tokens.Literal)
 				else
-					appendTok("symbol", symbol)
+					appendTok(Tokens.Symbol, symbol)
 				end
 			else
 				ctx:Throw("Unrecognized character '" .. char .. "'", line, col)
@@ -245,7 +213,7 @@ end
 --- Lexes MLang code into tokens
 ---@param ctx Context
 ---@param code string
----@return table<integer, Token>?
+---@return table<integer, Tokens.Base>?
 function MLang.Lex(ctx, code)
 	--[[local ret
 	pcall(function() ret = lex(ctx, code) end)
