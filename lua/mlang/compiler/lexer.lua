@@ -46,6 +46,9 @@ local OPERATOR_CHARS = MakeStringLUT("|&!=^~+-*/%")
 -- All operators with a valid assignment operator counterpart
 local ASSIGNMENT_OPS = MakeLUT({"|", "&", "+", "-", "*", "/", "//", "%"})
 
+-- All tokens which, when preceding a minus, will force that minus to be binary
+local NON_UNARY_TOKS = MakeLUT({Tokens.Literal, Tokens.Symbol, Tokens.ClosedBracket, Tokens.ClosedSquare})
+
 ---@param ctx Context
 ---@param code string
 ---@return table<integer, Tokens.Base>
@@ -54,11 +57,13 @@ local function lex(ctx, code)
 	local line, col = 1, 0
 	local codeLen = #code
 	local charPtr = 1
+	local lastTokType
 
 	--- Helper to append a token to the table
 	---@param type Tokens.Base
 	---@param value? string|number|boolean
 	local function appendTok(type, value)
+		lastTokType = type
 		numTokens = numTokens + 1
 		tokens[numTokens] = type.new(line, tokenStartCol, value)
 	end
@@ -97,7 +102,7 @@ local function lex(ctx, code)
 					appendTok(Tokens.Assignment, op)
 				elseif op == "=" then
 					appendTok(Tokens.Assignment)
-				elseif op == "-" and getChar(code, charPtr):match("[%(_%w]") and (charPtr - 2 <= 0 or not getChar(code, charPtr - 2):match("[%)_%w]")) then
+				elseif op == "-" and (not lastTokType or not NON_UNARY_TOKS[lastTokType]) then
 					appendTok(Tokens.Operator, "#") -- Special unary negative operator
 				elseif MLang.OPERATORS[op] then
 					appendTok(Tokens.Operator, op)

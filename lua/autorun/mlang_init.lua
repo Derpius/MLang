@@ -20,16 +20,7 @@ if SERVER then return end -- prevent double printing in singleplayer
 local context = MLang.Context("testing")
 
 local code = [[
-	num double(num n) {
-		return n;
-	}
-
-	num double(string s) {
-		return 4;
-	}
-
-	num doubled = double(3);
-	num doubled2 = double("hello world");
+	num x = - 5;
 ]]
 
 print("\nLEXING")
