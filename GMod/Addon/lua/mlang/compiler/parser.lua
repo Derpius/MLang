@@ -8,6 +8,7 @@ local function parse(ctx, tokens)
 	local tokPtr, numToks = 1, #tokens
 
 	local funcDepth, loopDepth = 0, 0
+	local isInRealm = false
 
 	--- Returns the next token if it's of the specified category (doesn't advance the token pointer)
 	---@param category string
@@ -414,9 +415,10 @@ local function parse(ctx, tokens)
 				constructor.value = parseBlock()
 				funcDepth = funcDepth - 1
 
+				numConstructors = numConstructors + 1
 				class.constructors[numConstructors] = constructor
 			else
-				local keyword = requireTok("keyword", "Expected public/private/operator or a constructor")
+				local keyword = requireTok("keyword", "Expected public/private/operator keyword or a constructor")
 				if keyword.value == Keyword.Operator then
 					-- TODO: Operator parsing
 				else
@@ -572,6 +574,16 @@ local function parse(ctx, tokens)
 				ctx:Throw("Not implemented yet", -1, -1)
 			elseif keyword.value == Keyword.Try then
 				ctx:Throw("Not implemented yet", -1, -1)
+			elseif keyword.value == Keyword.Server or keyword.value == Keyword.Client then
+				if isInRealm then
+					ctx:Throw("Can't nest a realm block inside another realm block", keyword.line, keyword.col)
+				end
+
+				isInRealm = true
+				local ret = Objects.Realm(keyword.line, keyword.col, keyword.value == Keyword.Server, parseBlock())
+				isInRealm = false
+
+				return ret
 			else
 				ctx:Throw("Invalid keyword to start line", keyword.line, keyword.col)
 			end

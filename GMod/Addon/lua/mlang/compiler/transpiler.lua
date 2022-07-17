@@ -49,7 +49,7 @@ local function literalOperation(ctx, operator, a, b)
 		if type(literal) == "string" then
 			ctx:Throw("Cannot implicitly cast string to bool", operator.line, operator.col)
 		end
-
+		error("Invalid type passed to boolCast")
 	end
 	
 	--- Attempts to cast a literal to a numeric type
@@ -206,7 +206,7 @@ local function transpile(ctx, ast)
 	---@param a Type
 	---@param b Type
 	---@param origin BaseObject Object to place the error message on
-	---@param msg string Optional custom error message
+	---@param msg? string Optional custom error message
 	local function checkType(a, b, origin, msg)
 		if not areTypesEqual(a, b) then
 			ctx:Throw(msg or "Type mismatch", origin.line, origin.col)
@@ -439,7 +439,7 @@ local function transpile(ctx, ast)
 			local code, type = compileLookup(definition.base)
 
 			if not type.classPtr.publics[definition.symbol] then
-				ctx:Throw(("'%s' is not a member of class '%s'"):format(definition.symbol, type.symbol))
+				ctx:Throw(("'%s' is not a member of class '%s'"):format(definition.symbol, type.symbol), definition.line, definition.col)
 			end
 
 			var = type.classPtr.publics[definition.symbol]
@@ -448,12 +448,14 @@ local function transpile(ctx, ast)
 			var = requireVariable(definition)
 		end
 
-		if var.constant then
+		if var.value and var.constant then
 			ctx:Throw("Attempted to redefine a constant variable", definition.line, definition.col)
 		end
 
 		local expression, expType = compileExpression(definition.value)
 		checkType(var.type, expType, definition)
+
+		var.value = definition.value
 		return ("%s%s = %s"):format(accessor, compileVarName(var), expression)
 	end
 
@@ -571,7 +573,7 @@ local function transpile(ctx, ast)
 			end
 
 			local lines = {}
-			if declaration.value then -- TODO: actual default def as call to default constructor (or default literal)
+			if declaration.value then -- TODO: Efficiently handle when a symbol is undefined at runtime
 				pushScope(functionScope)
 				for i, node in ipairs(declaration.value) do
 					lines[i] = compileLine(node)
@@ -589,7 +591,7 @@ local function transpile(ctx, ast)
 		declareSymbol(declaration)
 		compileType(declaration.type)
 
-		if not declaration.value then -- TODO: actual default def as call to default constructor (or default literal)
+		if not declaration.value then -- TODO: Efficiently handle when a symbol is undefined at runtime
 			return compileVarName(declaration)
 		end
 

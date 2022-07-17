@@ -51,7 +51,9 @@ local Keyword = {
 	Operator = 13,
 	Namespace = 14,
 	Try = 15,
-	Catch = 16
+	Catch = 16,
+	Server = 17,
+	Client = 18
 }
 MLang.Keyword = Keyword
 
@@ -72,10 +74,10 @@ local KEYWORDS = {
 	["operator"] = Keyword.Operator,
 	["namespace"] = Keyword.Namespace,
 	["try"] = Keyword.Try,
-	["catch"] = Keyword.Catch
+	["catch"] = Keyword.Catch,
+	["server"] = Keyword.Server,
+	["client"] = Keyword.Client
 }
-
-
 
 local ESCAPE_CHARS = {
 	b = "\\b", -- The string literal escape sequences are stored unescaped as they'll be emitted to raw lua

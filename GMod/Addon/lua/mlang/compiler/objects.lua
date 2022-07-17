@@ -256,10 +256,11 @@ end
 ---@field defined boolean
 ---@field privates table<string, Variable>
 ---@field publics table<string, Variable>
----@field constructors Variable[]
+---@field constructors Function[]
 ---@field operators table<string, Variable>
 ---@field extends? Type
 ---@field template? string[]
+local class = {}
 
 --- Classes
 ---@param line integer
@@ -274,5 +275,24 @@ function MLang.Objects.Class(line, col, symbol, template)
 		defined = false,
 		privates = {}, publics = {}, constructors = {}, operators = {},
 		_constructor = MLang.Objects.Class
+	}
+end
+
+---@class Realm : BaseObject
+---@field server boolean
+---@field block BaseObject[]
+local realm = {}
+
+--- Clientside and serverside realms
+---@param line integer
+---@param col integer
+---@param server boolean
+---@param block BaseObject[]
+---@return Realm
+function MLang.Objects.Realm(line, col, server, block)
+	return {
+		line = line, col = col,
+		server = server, block = block,
+		_constructor = MLang.Objects.Realm
 	}
 end
